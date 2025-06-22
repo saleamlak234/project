@@ -10,16 +10,22 @@ const fs = require('fs');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const depositRoutes = require('./routes/deposits');
+const enhancedDepositRoutes = require('./routes/enhancedDeposits');
 const withdrawalRoutes = require('./routes/withdrawals');
+const withdrawalScheduleRoutes = require('./routes/withdrawalSchedule');
 const commissionRoutes = require('./routes/commissions');
 const mlmRoutes = require('./routes/mlm');
 const dashboardRoutes = require('./routes/dashboard');
 const adminRoutes = require('./routes/admin');
+const adminAuthRoutes = require('./routes/adminAuth');
 const chapaRoutes = require('./routes/chapa');
+const merchantRoutes = require('./routes/merchants');
+const transactionRoutes = require('./routes/transactions');
 
 // Import middleware
 const authMiddleware = require('./middleware/auth');
 const adminMiddleware = require('./middleware/admin');
+const adminAuthMiddleware = require('./middleware/adminAuth');
 
 // Load environment variables
 dotenv.config();
@@ -50,14 +56,19 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/saham-tra
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/admin-auth', adminAuthRoutes);
 app.use('/api/user', authMiddleware, userRoutes);
 app.use('/api/deposits', authMiddleware, depositRoutes);
+app.use('/api/enhanced-deposits', authMiddleware, enhancedDepositRoutes);
 app.use('/api/withdrawals', authMiddleware, withdrawalRoutes);
+app.use('/api/withdrawal-schedule', authMiddleware, withdrawalScheduleRoutes);
 app.use('/api/commissions', authMiddleware, commissionRoutes);
 app.use('/api/mlm', authMiddleware, mlmRoutes);
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
-app.use('/api/admin', authMiddleware, adminMiddleware, adminRoutes);
+app.use('/api/admin', authMiddleware, adminAuthMiddleware(['view_users', 'view_transactions']), adminRoutes);
 app.use('/api/chapa', chapaRoutes);
+app.use('/api/merchants', authMiddleware, merchantRoutes);
+app.use('/api/transactions', authMiddleware, transactionRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
