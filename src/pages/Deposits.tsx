@@ -12,6 +12,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import axios from 'axios';
+import ReceiptPreview from '../components/ReceiptPreview';
 
 interface Deposit {
   id: string;
@@ -45,12 +46,25 @@ export default function Deposits() {
     paymentMethod: 'chapa_cbe' as 'chapa_cbe' | 'chapa_telebirr'
   });
   const [receipt, setReceipt] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     fetchDeposits();
   }, []);
+
+  useEffect(() => {
+    if (receipt) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReceiptPreview(reader.result as string);
+      };
+      reader.readAsDataURL(receipt);
+    } else {
+      setReceiptPreview(null);
+    }
+  }, [receipt]);
 
   const fetchDeposits = async () => {
     try {
@@ -90,6 +104,7 @@ export default function Deposits() {
         setShowDepositForm(false);
         setFormData({ amount: '', package: '', paymentMethod: 'chapa_cbe' });
         setReceipt(null);
+        setReceiptPreview(null);
         fetchDeposits();
       }
     } catch (err: any) {
@@ -187,7 +202,7 @@ export default function Deposits() {
                           {pkg.price.toLocaleString()} ETB
                         </p>
                         <p className="text-sm text-gray-600">
-                          dailyReturn Return: {pkg.dailyReturn.toLocaleString()} ETB
+                          Daily Return: {pkg.dailyReturn.toLocaleString()} ETB
                         </p>
                       </div>
                     ))}
@@ -267,13 +282,27 @@ export default function Deposits() {
                         id="receipt-upload"
                       />
                       <label htmlFor="receipt-upload" className="cursor-pointer">
-                        <Camera className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-600">
-                          {receipt ? receipt.name : 'Click to upload payment receipt'}
-                        </p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          PNG, JPG up to 10MB
-                        </p>
+                        {receiptPreview ? (
+                          <div className="space-y-4">
+                            <img
+                              src={receiptPreview}
+                              alt="Receipt preview"
+                              className="max-w-full max-h-48 mx-auto rounded-lg"
+                            />
+                            <p className="text-gray-600">{receipt?.name}</p>
+                            <p className="text-sm text-gray-500">Click to change</p>
+                          </div>
+                        ) : (
+                          <>
+                            <Camera className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                            <p className="text-gray-600">
+                              Click to upload payment receipt
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              PNG, JPG up to 10MB
+                            </p>
+                          </>
+                        )}
                       </label>
                     </div>
                   </div>
@@ -281,7 +310,11 @@ export default function Deposits() {
                   <div className="flex space-x-4">
                     <button
                       type="button"
-                      onClick={() => setShowDepositForm(false)}
+                      onClick={() => {
+                        setShowDepositForm(false);
+                        setReceipt(null);
+                        setReceiptPreview(null);
+                      }}
                       className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-3 rounded-lg font-medium"
                     >
                       Cancel
@@ -338,15 +371,11 @@ export default function Deposits() {
 
                   {deposit.receiptUrl && (
                     <div className="mt-4">
-                      <a
-                        href={deposit.receiptUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary-600 hover:text-primary-700 text-sm flex items-center space-x-1"
-                      >
-                        <Upload className="h-4 w-4" />
-                        <span>View Receipt</span>
-                      </a>
+                      <ReceiptPreview
+                        receiptUrl={deposit.receiptUrl}
+                        filename={`deposit-receipt-${deposit.id}`}
+                        showDownload={true}
+                      />
                     </div>
                   )}
                 </div>

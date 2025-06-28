@@ -10,9 +10,11 @@ import {
   ArrowDownRight,
   Eye,
   Download,
-  Calendar
+  Calendar,
+  X
 } from 'lucide-react';
 import axios from 'axios';
+import ReceiptPreview from '../../components/ReceiptPreview';
 
 interface Transaction {
   id: string;
@@ -246,6 +248,9 @@ export default function AdminTransactions() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Receipt
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
@@ -304,6 +309,17 @@ export default function AdminTransactions() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(transaction.createdAt).toLocaleDateString()}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {transaction.receiptUrl ? (
+                        <ReceiptPreview
+                          receiptUrl={transaction.receiptUrl}
+                          filename={`receipt-${transaction.id}`}
+                          showDownload={true}
+                        />
+                      ) : (
+                        <span className="text-sm text-gray-400">No receipt</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={() => {
@@ -333,7 +349,7 @@ export default function AdminTransactions() {
                     onClick={() => setShowTransactionModal(false)}
                     className="text-gray-400 hover:text-gray-600"
                   >
-                    <XCircle className="h-6 w-6" />
+                    <X className="h-6 w-6" />
                   </button>
                 </div>
 
@@ -423,15 +439,12 @@ export default function AdminTransactions() {
                   {selectedTransaction.receiptUrl && (
                     <div className="bg-gray-50 rounded-lg p-4">
                       <h3 className="font-semibold text-gray-900 mb-3">Receipt</h3>
-                      <a
-                        href={selectedTransaction.receiptUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary-600 hover:text-primary-700 flex items-center space-x-2"
-                      >
-                        <Download className="h-4 w-4" />
-                        <span>View Receipt</span>
-                      </a>
+                      <ReceiptPreview
+                        receiptUrl={selectedTransaction.receiptUrl}
+                        filename={`receipt-${selectedTransaction.id}`}
+                        showDownload={true}
+                        className="justify-start"
+                      />
                     </div>
                   )}
 
