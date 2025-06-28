@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+
 const userSchema = new mongoose.Schema({
   fullName: {
     type: String,
@@ -85,12 +86,34 @@ const userSchema = new mongoose.Schema({
   telegramChatId: {
     type: String,
     default: null
+  },
+  // Login attempt tracking
+  loginAttempts: {
+    type: Number,
+    default: 0
+  },
+  lockedUntil: {
+    type: Date,
+    default: null
+  },
+  lastFailedLogin: {
+    type: Date,
+    default: null
+  },
+  // Security settings
+  maxLoginAttempts: {
+    type: Number,
+    default: 5
+  },
+  lockoutDuration: {
+    type: Number,
+    default: 30 * 60 * 1000 // 30 minutes in milliseconds
   }
 }, {
   timestamps: true
 });
 
-
+// Pre-save middleware for password hashing
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
@@ -103,12 +126,60 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-
+// Password comparison method
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// Check if account is locked
+userSchema.methods.isLocked = function() {
+  return !!(this.lockedUntil && this.lockedUntil > Date.now());
+};
 
+// Increment login attempts
+userSchema.methods.incLoginAttempts = function() {
+  // If we have a previous lock that has expired, restart at 1
+  if (this.lockedUntil && this.lockedUntil < Date.now()) {
+    return this.updateOne({
+      $unset: { lockedUntil: 1 },
+      $set: { 
+        loginAttempts: 1,
+        lastFailedLogin: new Date()
+      }
+    });
+  }
+  
+  const updates = { 
+    $inc: { loginAttempts: 1 },
+    $set: { lastFailedLogin: new Date() }
+  };
+  
+  // Lock account if we've reached max attempts and it's not locked already
+  if (this.loginAttempts + 1 >= this.maxLoginAttempts && !this.isLocked()) {
+    updates.$set.lockedUntil = Date.now() + this.lockoutDuration;
+  }
+  
+  return this.updateOne(updates);
+};
+
+// Reset login attempts
+userSchema.methods.resetLoginAttempts = function() {
+  return this.updateOne({
+    $unset: { 
+      loginAttempts: 1, 
+      lockedUntil: 1,
+      lastFailedLogin: 1
+    }
+  });
+};
+
+// Get remaining lockout time in minutes
+userSchema.methods.getRemainingLockoutTime = function() {
+  if (!this.isLocked()) return 0;
+  return Math.ceil((this.lockedUntil - Date.now()) / (60 * 1000));
+};
+
+// Generate referral code method
 userSchema.methods.generateReferralCode = function() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';

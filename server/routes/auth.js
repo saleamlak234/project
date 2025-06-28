@@ -9,7 +9,7 @@ const telegramService = require('../services/telegram');
 const router = express.Router();
 
 // Email transporter setup
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER || 'sahamtrading11@gmail.com',
@@ -101,7 +101,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login
+// Login with enhanced security
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -112,14 +112,48 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
+    // Check if account is locked
+    if (user.isLocked()) {
+      const remainingTime = user.getRemainingLockoutTime();
+      return res.status(423).json({ 
+        message: `Account is locked due to multiple failed login attempts. Please try again in ${remainingTime} minutes.`,
+        lockedUntil: user.lockedUntil,
+        remainingMinutes: remainingTime
+      });
+    }
+
     // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      // Increment login attempts
+      await user.incLoginAttempts();
+      
+      // Get updated user data to check if account is now locked
+      const updatedUser = await User.findById(user._id);
+      if (updatedUser.isLocked()) {
+        const remainingTime = updatedUser.getRemainingLockoutTime();
+        return res.status(423).json({ 
+          message: `Too many failed login attempts. Account is now locked for ${remainingTime} minutes.`,
+          lockedUntil: updatedUser.lockedUntil,
+          remainingMinutes: remainingTime
+        });
+      }
+      
+      const attemptsLeft = user.maxLoginAttempts - (user.loginAttempts + 1);
+      return res.status(400).json({ 
+        message: `Invalid credentials. ${attemptsLeft} attempts remaining before account lockout.`,
+        attemptsRemaining: attemptsLeft
+      });
     }
 
+    // Check if account is active
     if (!user.isActive) {
       return res.status(403).json({ message: 'Account is deactivated. Please contact support.' });
+    }
+
+    // Reset login attempts on successful login
+    if (user.loginAttempts > 0) {
+      await user.resetLoginAttempts();
     }
 
     // Update last login
@@ -155,6 +189,52 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
+// Unlock account (admin only)
+router.post('/unlock-account', authMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    // Check if current user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Reset login attempts and unlock account
+    await user.resetLoginAttempts();
+
+    res.json({ message: 'Account unlocked successfully' });
+  } catch (error) {
+    console.error('Unlock account error:', error);
+    res.status(500).json({ message: 'Server error unlocking account' });
+  }
+});
+
+// Get account security info
+router.get('/security-info', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('loginAttempts lockedUntil lastFailedLogin maxLoginAttempts');
+    
+    const securityInfo = {
+      loginAttempts: user.loginAttempts || 0,
+      maxLoginAttempts: user.maxLoginAttempts,
+      isLocked: user.isLocked(),
+      lockedUntil: user.lockedUntil,
+      lastFailedLogin: user.lastFailedLogin,
+      remainingMinutes: user.isLocked() ? user.getRemainingLockoutTime() : 0
+    };
+
+    res.json(securityInfo);
+  } catch (error) {
+    console.error('Get security info error:', error);
+    res.status(500).json({ message: 'Server error fetching security information' });
+  }
+});
+
 // Forgot password
 router.post('/forgot-password', async (req, res) => {
   try {
@@ -163,6 +243,15 @@ router.post('/forgot-password', async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({ message: 'User not found with this email' });
+    }
+
+    // Check if account is locked
+    if (user.isLocked()) {
+      const remainingTime = user.getRemainingLockoutTime();
+      return res.status(423).json({ 
+        message: `Account is locked. Please try again in ${remainingTime} minutes.`,
+        remainingMinutes: remainingTime
+      });
     }
 
     // Generate reset token
@@ -211,10 +300,14 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ message: 'Invalid or expired reset token' });
     }
 
-    // Update password
+    // Update password and clear reset fields
     user.password = password;
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
+    
+    // Reset login attempts when password is reset
+    await user.resetLoginAttempts();
+    
     await user.save();
 
     res.json({ message: 'Password reset successful' });

@@ -23,22 +23,64 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ message: 'Admin access not configured' });
     }
 
-    // Check if account is locked
+    // Check if admin role is locked
     if (adminRole.isLocked()) {
+      const remainingTime = Math.ceil((adminRole.lockedUntil - Date.now()) / (60 * 1000));
       return res.status(423).json({ 
-        message: 'Account is locked due to multiple failed login attempts. Please try again later.' 
+        message: `Admin account is locked due to multiple failed login attempts. Please try again in ${remainingTime} minutes.`,
+        remainingMinutes: remainingTime
+      });
+    }
+
+    // Check if user account is locked
+    if (user.isLocked()) {
+      const remainingTime = user.getRemainingLockoutTime();
+      return res.status(423).json({ 
+        message: `Account is locked due to multiple failed login attempts. Please try again in ${remainingTime} minutes.`,
+        remainingMinutes: remainingTime
       });
     }
 
     // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      // Increment login attempts for both user and admin role
+      await user.incLoginAttempts();
       await adminRole.incLoginAttempts();
-      return res.status(400).json({ message: 'Invalid admin credentials' });
+      
+      // Check if accounts are now locked
+      const updatedUser = await User.findById(user._id);
+      const updatedAdminRole = await AdminRole.findById(adminRole._id);
+      
+      if (updatedUser.isLocked() || updatedAdminRole.isLocked()) {
+        const userRemainingTime = updatedUser.getRemainingLockoutTime();
+        const adminRemainingTime = updatedAdminRole.isLocked() ? 
+          Math.ceil((updatedAdminRole.lockedUntil - Date.now()) / (60 * 1000)) : 0;
+        const maxRemainingTime = Math.max(userRemainingTime, adminRemainingTime);
+        
+        return res.status(423).json({ 
+          message: `Too many failed login attempts. Admin account is now locked for ${maxRemainingTime} minutes.`,
+          remainingMinutes: maxRemainingTime
+        });
+      }
+      
+      const userAttemptsLeft = user.maxLoginAttempts - (user.loginAttempts + 1);
+      const adminAttemptsLeft = 5 - (adminRole.loginAttempts + 1);
+      const minAttemptsLeft = Math.min(userAttemptsLeft, adminAttemptsLeft);
+      
+      return res.status(400).json({ 
+        message: `Invalid admin credentials. ${minAttemptsLeft} attempts remaining before account lockout.`,
+        attemptsRemaining: minAttemptsLeft
+      });
     }
 
     // Reset login attempts on successful login
-    await adminRole.resetLoginAttempts();
+    if (user.loginAttempts > 0) {
+      await user.resetLoginAttempts();
+    }
+    if (adminRole.loginAttempts > 0) {
+      await adminRole.resetLoginAttempts();
+    }
     
     // Update last login
     adminRole.lastLogin = new Date();
@@ -47,7 +89,7 @@ router.post('/login', async (req, res) => {
     user.lastLoginAt = new Date();
     await user.save();
 
-    // Generate token
+    // Generate token with shorter expiration for admin
     const token = jwt.sign(
       { userId: user._id, role: user.role, adminRole: adminRole.role },
       process.env.JWT_SECRET || 'your-secret-key',
@@ -64,7 +106,8 @@ router.post('/login', async (req, res) => {
       user: userResponse,
       adminRole: {
         role: adminRole.role,
-        permissions: adminRole.permissions
+        permissions: adminRole.permissions,
+        lastLogin: adminRole.lastLogin
       }
     });
   } catch (error) {
@@ -87,12 +130,44 @@ router.get('/profile', authMiddleware, async (req, res) => {
       adminRole: adminRole ? {
         role: adminRole.role,
         permissions: adminRole.permissions,
-        lastLogin: adminRole.lastLogin
+        lastLogin: adminRole.lastLogin,
+        loginAttempts: adminRole.loginAttempts,
+        isLocked: adminRole.isLocked()
       } : null
     });
   } catch (error) {
     console.error('Get admin profile error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Unlock admin account (super admin only)
+router.post('/unlock-admin', authMiddleware, async (req, res) => {
+  try {
+    const { adminUserId } = req.body;
+
+    // Check if current user is super admin
+    const currentAdminRole = await AdminRole.findOne({ user: req.user._id });
+    if (!currentAdminRole || currentAdminRole.role !== 'super_admin') {
+      return res.status(403).json({ message: 'Only super admin can unlock admin accounts' });
+    }
+
+    // Find the admin user and role
+    const adminUser = await User.findById(adminUserId);
+    const adminRole = await AdminRole.findOne({ user: adminUserId });
+
+    if (!adminUser || !adminRole) {
+      return res.status(404).json({ message: 'Admin user not found' });
+    }
+
+    // Reset login attempts for both user and admin role
+    await adminUser.resetLoginAttempts();
+    await adminRole.resetLoginAttempts();
+
+    res.json({ message: 'Admin account unlocked successfully' });
+  } catch (error) {
+    console.error('Unlock admin account error:', error);
+    res.status(500).json({ message: 'Server error unlocking admin account' });
   }
 });
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { TrendingUp, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { TrendingUp, Mail, Lock, Eye, EyeOff, AlertCircle, Clock, Shield } from 'lucide-react';
 
 export default function Login() {
   const [formData, setFormData] = useState({
@@ -11,6 +11,11 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [lockoutInfo, setLockoutInfo] = useState<{
+    isLocked: boolean;
+    remainingMinutes: number;
+    attemptsRemaining?: number;
+  } | null>(null);
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -19,12 +24,32 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setLockoutInfo(null);
 
     try {
       await login(formData.email, formData.password);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      const errorData = err.response?.data;
+      
+      if (err.response?.status === 423) {
+        // Account locked
+        setLockoutInfo({
+          isLocked: true,
+          remainingMinutes: errorData.remainingMinutes || 0
+        });
+        setError(errorData.message || 'Account is temporarily locked');
+      } else if (errorData.attemptsRemaining !== undefined) {
+        // Failed login with attempts remaining
+        setLockoutInfo({
+          isLocked: false,
+          remainingMinutes: 0,
+          attemptsRemaining: errorData.attemptsRemaining
+        });
+        setError(errorData.message || 'Invalid credentials');
+      } else {
+        setError(errorData.message || 'Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -35,6 +60,15 @@ export default function Login() {
       ...prev,
       [e.target.name]: e.target.value
     }));
+  };
+
+  const formatTime = (minutes: number) => {
+    if (minutes < 60) {
+      return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+    }
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours} hour${hours !== 1 ? 's' : ''} ${remainingMinutes > 0 ? `and ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}` : ''}`;
   };
 
   return (
@@ -50,7 +84,40 @@ export default function Login() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          {error && (
+          {/* Account Locked Warning */}
+          {lockoutInfo?.isLocked && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center space-x-2 mb-2">
+                <Shield className="h-5 w-5 text-red-500" />
+                <span className="font-medium text-red-800">Account Temporarily Locked</span>
+              </div>
+              <div className="flex items-center space-x-2 text-red-700">
+                <Clock className="h-4 w-4" />
+                <span className="text-sm">
+                  Please try again in {formatTime(lockoutInfo.remainingMinutes)}
+                </span>
+              </div>
+              <p className="text-xs text-red-600 mt-2">
+                This security measure protects your account from unauthorized access attempts.
+              </p>
+            </div>
+          )}
+
+          {/* Login Attempts Warning */}
+          {lockoutInfo && !lockoutInfo.isLocked && lockoutInfo.attemptsRemaining !== undefined && lockoutInfo.attemptsRemaining <= 2 && (
+            <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="h-5 w-5 text-yellow-500" />
+                <span className="font-medium text-yellow-800">Security Warning</span>
+              </div>
+              <p className="text-sm text-yellow-700 mt-1">
+                {lockoutInfo.attemptsRemaining} attempt{lockoutInfo.attemptsRemaining !== 1 ? 's' : ''} remaining before account lockout
+              </p>
+            </div>
+          )}
+
+          {/* General Error */}
+          {error && !lockoutInfo?.isLocked && (
             <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-2">
               <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
               <span className="text-red-700 text-sm">{error}</span>
@@ -71,7 +138,8 @@ export default function Login() {
                   name="email"
                   type="email"
                   required
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                  disabled={lockoutInfo?.isLocked}
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="Enter your email"
                   value={formData.email}
                   onChange={handleChange}
@@ -92,7 +160,8 @@ export default function Login() {
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
-                  className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                  disabled={lockoutInfo?.isLocked}
+                  className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="Enter your password"
                   value={formData.password}
                   onChange={handleChange}
@@ -101,6 +170,7 @@ export default function Login() {
                   type="button"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={lockoutInfo?.isLocked}
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
@@ -117,7 +187,8 @@ export default function Login() {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  disabled={lockoutInfo?.isLocked}
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded disabled:cursor-not-allowed"
                 />
                 <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
                   Remember me
@@ -134,11 +205,13 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || lockoutInfo?.isLocked}
               className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : lockoutInfo?.isLocked ? (
+                'Account Locked'
               ) : (
                 'Sign In'
               )}
