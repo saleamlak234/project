@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import ReceiptPreview from '../../components/ReceiptPreview';
+import ImagePreview from '../../components/ImagePreview';
 
 interface Transaction {
   id: string;
@@ -42,6 +43,8 @@ export default function AdminTransactions() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -84,6 +87,16 @@ export default function AdminTransactions() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleImagePreview = (imageUrl: string) => {
+    setPreviewImageUrl(imageUrl);
+    setShowImagePreview(true);
+  };
+
+  const isImage = (url: string) => {
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+    return imageExtensions.some(ext => url.toLowerCase().includes(ext));
   };
 
   const filteredTransactions = transactions.filter(transaction => {
@@ -311,11 +324,29 @@ export default function AdminTransactions() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {transaction.receiptUrl ? (
-                        <ReceiptPreview
-                          receiptUrl={transaction.receiptUrl}
-                          filename={`receipt-${transaction.id}`}
-                          showDownload={true}
-                        />
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => {
+                              if (isImage(transaction.receiptUrl!)) {
+                                handleImagePreview(transaction.receiptUrl!);
+                              } else {
+                                window.open(transaction.receiptUrl, '_blank');
+                              }
+                            }}
+                            className="text-primary-600 hover:text-primary-900 flex items-center space-x-1"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span className="text-sm">View</span>
+                          </button>
+                          <a
+                            href={transaction.receiptUrl}
+                            download={`receipt-${transaction.id}`}
+                            className="text-gray-600 hover:text-gray-900 flex items-center space-x-1"
+                          >
+                            <Download className="h-4 w-4" />
+                            <span className="text-sm">Download</span>
+                          </a>
+                        </div>
                       ) : (
                         <span className="text-sm text-gray-400">No receipt</span>
                       )}
@@ -337,6 +368,15 @@ export default function AdminTransactions() {
             </table>
           </div>
         </div>
+
+        {/* Image Preview Modal */}
+        {showImagePreview && (
+          <ImagePreview
+            src={previewImageUrl}
+            alt="Receipt"
+            onClose={() => setShowImagePreview(false)}
+          />
+        )}
 
         {/* Transaction Details Modal */}
         {showTransactionModal && selectedTransaction && (
@@ -439,12 +479,29 @@ export default function AdminTransactions() {
                   {selectedTransaction.receiptUrl && (
                     <div className="bg-gray-50 rounded-lg p-4">
                       <h3 className="font-semibold text-gray-900 mb-3">Receipt</h3>
-                      <ReceiptPreview
-                        receiptUrl={selectedTransaction.receiptUrl}
-                        filename={`receipt-${selectedTransaction.id}`}
-                        showDownload={true}
-                        className="justify-start"
-                      />
+                      <div className="flex items-center space-x-4">
+                        <button
+                          onClick={() => {
+                            if (isImage(selectedTransaction.receiptUrl!)) {
+                              handleImagePreview(selectedTransaction.receiptUrl!);
+                            } else {
+                              window.open(selectedTransaction.receiptUrl, '_blank');
+                            }
+                          }}
+                          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span>View Receipt</span>
+                        </button>
+                        <a
+                          href={selectedTransaction.receiptUrl}
+                          download={`receipt-${selectedTransaction.id}`}
+                          className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span>Download</span>
+                        </a>
+                      </div>
                     </div>
                   )}
 

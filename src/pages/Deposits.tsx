@@ -3,26 +3,38 @@ import { useAuth } from '../contexts/AuthContext';
 import { 
   Plus, 
   Upload, 
-  CreditCard,
-  Smartphone,
   Clock,
   CheckCircle,
   XCircle,
   Camera,
-  DollarSign
+  DollarSign,
+  Building,
+  User,
+  Copy,
+  Eye
 } from 'lucide-react';
 import axios from 'axios';
 import ReceiptPreview from '../components/ReceiptPreview';
+import ImagePreview from '../components/ImagePreview';
+
+interface MerchantAccount {
+  _id: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  branch: string;
+  qrCode?: string;
+}
 
 interface Deposit {
   id: string;
   amount: number;
   package: string;
-  paymentMethod: 'chapa_cbe' | 'chapa_telebirr';
   status: 'pending' | 'completed' | 'rejected';
   receiptUrl?: string;
   createdAt: string;
   updatedAt: string;
+  rejectionReason?: string;
 }
 
 const PACKAGES = [
@@ -38,20 +50,22 @@ const PACKAGES = [
 export default function Deposits() {
   const { user } = useAuth();
   const [deposits, setDeposits] = useState<Deposit[]>([]);
+  const [merchants, setMerchants] = useState<MerchantAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDepositForm, setShowDepositForm] = useState(false);
-  const [formData, setFormData] = useState({
-    amount: '',
-    package: '',
-    paymentMethod: 'chapa_cbe' as 'chapa_cbe' | 'chapa_telebirr'
-  });
+  const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [selectedMerchant, setSelectedMerchant] = useState<MerchantAccount | null>(null);
+  const [showMerchantDetails, setShowMerchantDetails] = useState(false);
   const [receipt, setReceipt] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState('');
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
 
   useEffect(() => {
-    fetchDeposits();
+    fetchData();
   }, []);
 
   useEffect(() => {
@@ -66,47 +80,69 @@ export default function Deposits() {
     }
   }, [receipt]);
 
-  const fetchDeposits = async () => {
+  const fetchData = async () => {
     try {
-      const response = await axios.get('/deposits');
-      setDeposits(response.data.deposits);
+      const [depositsResponse, merchantsResponse] = await Promise.all([
+        axios.get('/deposits'),
+        axios.get('/merchants')
+      ]);
+      
+      setDeposits(depositsResponse.data.deposits);
+      setMerchants(merchantsResponse.data.merchants);
     } catch (error) {
-      console.error('Failed to fetch deposits:', error);
+      console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  const handlePackageSelect = (pkg: any) => {
+    setSelectedPackage(pkg);
+    setShowDepositForm(true);
+  };
+
+  const handleMerchantSelect = (merchant: MerchantAccount) => {
+    setSelectedMerchant(merchant);
+    setShowMerchantDetails(true);
+  };
+
+  const copyToClipboard = async (text: string, type: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(type);
+    setTimeout(() => setCopied(''), 2000);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedPackage || !selectedMerchant || !receipt) {
+      setError('Please select a package, merchant account, and upload a receipt');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
 
     try {
-      const formDataToSend = new FormData();
-      formDataToSend.append('amount', formData.amount);
-      formDataToSend.append('package', formData.package);
-      formDataToSend.append('paymentMethod', formData.paymentMethod);
-      if (receipt) {
-        formDataToSend.append('receipt', receipt);
-      }
+      const formData = new FormData();
+      formData.append('amount', selectedPackage.price.toString());
+      formData.append('package', selectedPackage.name);
+      formData.append('paymentMethod', 'manual_transfer');
+      formData.append('merchantId', selectedMerchant._id);
+      formData.append('receipt', receipt);
 
-      const response = await axios.post('/deposits', formDataToSend, {
+      await axios.post('/deposits', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
 
-      // Handle Chapa payment redirect if needed
-      if (response.data.checkout_url) {
-        window.location.href = response.data.checkout_url;
-      } else {
-        setShowDepositForm(false);
-        setFormData({ amount: '', package: '', paymentMethod: 'chapa_cbe' });
-        setReceipt(null);
-        setReceiptPreview(null);
-        fetchDeposits();
-      }
+      setShowDepositForm(false);
+      setShowMerchantDetails(false);
+      setSelectedPackage(null);
+      setSelectedMerchant(null);
+      setReceipt(null);
+      setReceiptPreview(null);
+      fetchData();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to create deposit');
     } finally {
@@ -114,12 +150,9 @@ export default function Deposits() {
     }
   };
 
-  const handlePackageSelect = (pkg: any) => {
-    setFormData(prev => ({
-      ...prev,
-      amount: pkg.price.toString(),
-      package: pkg.name
-    }));
+  const handleImagePreview = (imageUrl: string) => {
+    setPreviewImageUrl(imageUrl);
+    setShowImagePreview(true);
   };
 
   const getStatusIcon = (status: string) => {
@@ -158,139 +191,256 @@ export default function Deposits() {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Deposits</h1>
-            <p className="text-gray-600 mt-1">Manage your investment deposits</p>
+            <h1 className="text-3xl font-bold text-gray-900">Investment Packages</h1>
+            <p className="text-gray-600 mt-1">Choose your investment package and make a deposit</p>
           </div>
-          <button
-            onClick={() => setShowDepositForm(true)}
-            className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2"
-          >
-            <Plus className="h-5 w-5" />
-            <span>New Deposit</span>
-          </button>
         </div>
 
-        {/* Deposit Form Modal */}
-        {showDepositForm && (
+        {/* Investment Packages */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {PACKAGES.map((pkg, index) => (
+            <div
+              key={index}
+              className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => handlePackageSelect(pkg)}
+            >
+              <div className="text-center">
+                <h3 className="text-xl font-bold text-gray-900 mb-2">{pkg.name}</h3>
+                <div className="text-3xl font-bold text-primary-600 mb-2">
+                  {pkg.price.toLocaleString()} ETB
+                </div>
+                <div className="text-sm text-gray-600 mb-4">
+                  Daily Return: {pkg.dailyReturn.toLocaleString()} ETB
+                </div>
+                <button className="w-full bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors">
+                  Select Package
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Package Selection Modal */}
+        {showDepositForm && selectedPackage && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl max-w-md w-full max-h-screen overflow-y-auto">
+              <div className="p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                  {selectedPackage.name}
+                </h2>
+                
+                <div className="bg-primary-50 rounded-lg p-4 mb-6">
+                  <div className="text-center">
+                    <p className="text-primary-800 font-semibold">Investment Amount</p>
+                    <p className="text-3xl font-bold text-primary-600">
+                      {selectedPackage.price.toLocaleString()} ETB
+                    </p>
+                    <p className="text-sm text-primary-700">
+                      Daily Return: {selectedPackage.dailyReturn.toLocaleString()} ETB
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Select Merchant Account
+                  </h3>
+                  <div className="space-y-3">
+                    {merchants.map((merchant) => (
+                      <div
+                        key={merchant._id}
+                        onClick={() => handleMerchantSelect(merchant)}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          selectedMerchant?._id === merchant._id
+                            ? 'border-primary-500 bg-primary-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Building className="h-5 w-5 text-primary-600" />
+                          <div>
+                            <p className="font-semibold text-gray-900">{merchant.bankName}</p>
+                            <p className="text-sm text-gray-600">{merchant.accountHolder}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex space-x-4">
+                  <button
+                    onClick={() => {
+                      setShowDepositForm(false);
+                      setSelectedPackage(null);
+                      setSelectedMerchant(null);
+                    }}
+                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-3 rounded-lg font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => selectedMerchant && setShowMerchantDetails(true)}
+                    disabled={!selectedMerchant}
+                    className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-4 py-3 rounded-lg font-medium disabled:opacity-50"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Merchant Details Modal */}
+        {showMerchantDetails && selectedMerchant && selectedPackage && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl max-w-2xl w-full max-h-screen overflow-y-auto">
               <div className="p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Make a Deposit</h2>
-                
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                  Payment Details
+                </h2>
+
                 {error && (
                   <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">
                     {error}
                   </div>
                 )}
 
-                {/* Package Selection */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Choose Package</h3>
+                {/* Merchant Account Details */}
+                <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Transfer to this Account
+                  </h3>
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {PACKAGES.map((pkg, index) => (
-                      <div
-                        key={index}
-                        onClick={() => handlePackageSelect(pkg)}
-                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          formData.package === pkg.name
-                            ? 'border-primary-500 bg-primary-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <h4 className="font-semibold text-gray-900">{pkg.name}</h4>
-                        <p className="text-2xl font-bold text-primary-600 mt-1">
-                          {pkg.price.toLocaleString()} ETB
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          Daily Return: {pkg.dailyReturn.toLocaleString()} ETB
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Bank Name
+                        </label>
+                        <div className="flex items-center justify-between p-3 bg-white rounded border">
+                          <span className="font-semibold">{selectedMerchant.bankName}</span>
+                          <button
+                            onClick={() => copyToClipboard(selectedMerchant.bankName, 'bank')}
+                            className="text-primary-600 hover:text-primary-700"
+                          >
+                            {copied === 'bank' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Account Number
+                        </label>
+                        <div className="flex items-center justify-between p-3 bg-white rounded border">
+                          <span className="font-mono font-semibold">{selectedMerchant.accountNumber}</span>
+                          <button
+                            onClick={() => copyToClipboard(selectedMerchant.accountNumber, 'account')}
+                            className="text-primary-600 hover:text-primary-700"
+                          >
+                            {copied === 'account' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Account Holder
+                        </label>
+                        <div className="flex items-center justify-between p-3 bg-white rounded border">
+                          <span className="font-semibold">{selectedMerchant.accountHolder}</span>
+                          <button
+                            onClick={() => copyToClipboard(selectedMerchant.accountHolder, 'holder')}
+                            className="text-primary-600 hover:text-primary-700"
+                          >
+                            {copied === 'holder' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Branch
+                        </label>
+                        <div className="flex items-center justify-between p-3 bg-white rounded border">
+                          <span>{selectedMerchant.branch}</span>
+                          <button
+                            onClick={() => copyToClipboard(selectedMerchant.branch, 'branch')}
+                            className="text-primary-600 hover:text-primary-700"
+                          >
+                            {copied === 'branch' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* QR Code */}
+                    {selectedMerchant.qrCode && (
+                      <div className="flex flex-col items-center">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          QR Code
+                        </label>
+                        <div className="bg-white p-4 rounded-lg border cursor-pointer" onClick={() => handleImagePreview(selectedMerchant.qrCode!)}>
+                          <img 
+                            src={selectedMerchant.qrCode} 
+                            alt="Payment QR Code"
+                            className="w-48 h-48 object-contain"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2 text-center">
+                          Click to view full size
                         </p>
                       </div>
-                    ))}
+                    )}
+                  </div>
+
+                  <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <DollarSign className="h-5 w-5 text-yellow-600" />
+                      <span className="font-semibold text-yellow-800">
+                        Amount to Transfer: {selectedPackage.price.toLocaleString()} ETB
+                      </span>
+                    </div>
                   </div>
                 </div>
 
+                {/* Receipt Upload */}
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Amount (ETB)
-                    </label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                      <input
-                        type="number"
-                        value={formData.amount}
-                        onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                        className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        placeholder="Enter amount"
-                        required
-                        min="1000"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Payment Method
-                    </label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div
-                        onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'chapa_cbe' }))}
-                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          formData.paymentMethod === 'chapa_cbe'
-                            ? 'border-primary-500 bg-primary-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <CreditCard className="h-6 w-6 text-primary-600" />
-                          <div>
-                            <h4 className="font-semibold text-gray-900">CBE Banking</h4>
-                            <p className="text-sm text-gray-600">Commercial Bank of Ethiopia</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'chapa_telebirr' }))}
-                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          formData.paymentMethod === 'chapa_telebirr'
-                            ? 'border-primary-500 bg-primary-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <Smartphone className="h-6 w-6 text-primary-600" />
-                          <div>
-                            <h4 className="font-semibold text-gray-900">TeleBirr</h4>
-                            <p className="text-sm text-gray-600">Mobile payment</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Payment Receipt (Optional)
+                      Upload Payment Receipt *
                     </label>
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*,application/pdf"
                         onChange={(e) => setReceipt(e.target.files?.[0] || null)}
                         className="hidden"
                         id="receipt-upload"
+                        required
                       />
                       <label htmlFor="receipt-upload" className="cursor-pointer">
                         {receiptPreview ? (
                           <div className="space-y-4">
-                            <img
-                              src={receiptPreview}
-                              alt="Receipt preview"
-                              className="max-w-full max-h-48 mx-auto rounded-lg"
-                            />
+                            <div className="relative">
+                              <img
+                                src={receiptPreview}
+                                alt="Receipt preview"
+                                className="max-w-full max-h-48 mx-auto rounded-lg cursor-pointer"
+                                onClick={() => handleImagePreview(receiptPreview)}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleImagePreview(receiptPreview)}
+                                className="absolute top-2 right-2 bg-white bg-opacity-80 hover:bg-opacity-100 rounded-full p-2 transition-all"
+                              >
+                                <Eye className="h-4 w-4 text-gray-600" />
+                              </button>
+                            </div>
                             <p className="text-gray-600">{receipt?.name}</p>
-                            <p className="text-sm text-gray-500">Click to change</p>
+                            <p className="text-sm text-gray-500">Click image to preview or here to change</p>
                           </div>
                         ) : (
                           <>
@@ -299,7 +449,7 @@ export default function Deposits() {
                               Click to upload payment receipt
                             </p>
                             <p className="text-sm text-gray-500 mt-1">
-                              PNG, JPG up to 10MB
+                              PNG, JPG, PDF up to 10MB
                             </p>
                           </>
                         )}
@@ -311,7 +461,10 @@ export default function Deposits() {
                     <button
                       type="button"
                       onClick={() => {
+                        setShowMerchantDetails(false);
                         setShowDepositForm(false);
+                        setSelectedPackage(null);
+                        setSelectedMerchant(null);
                         setReceipt(null);
                         setReceiptPreview(null);
                       }}
@@ -321,13 +474,13 @@ export default function Deposits() {
                     </button>
                     <button
                       type="submit"
-                      disabled={submitting}
+                      disabled={submitting || !receipt}
                       className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-4 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                     >
                       {submitting ? (
                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                       ) : (
-                        'Create Deposit'
+                        'Submit Deposit'
                       )}
                     </button>
                   </div>
@@ -337,7 +490,16 @@ export default function Deposits() {
           </div>
         )}
 
-        {/* Deposits List */}
+        {/* Image Preview Modal */}
+        {showImagePreview && (
+          <ImagePreview
+            src={previewImageUrl}
+            alt="Preview"
+            onClose={() => setShowImagePreview(false)}
+          />
+        )}
+
+        {/* Deposits History */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">Deposit History</h2>
@@ -353,8 +515,7 @@ export default function Deposits() {
                       <div>
                         <h3 className="font-semibold text-gray-900">{deposit.package}</h3>
                         <p className="text-sm text-gray-600">
-                          {new Date(deposit.createdAt).toLocaleDateString()} • 
-                          {deposit.paymentMethod === 'chapa_cbe' ? ' CBE Banking' : ' TeleBirr'}
+                          {new Date(deposit.createdAt).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
@@ -378,6 +539,14 @@ export default function Deposits() {
                       />
                     </div>
                   )}
+
+                  {deposit.status === 'rejected' && deposit.rejectionReason && (
+                    <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-red-700 text-sm">
+                        <strong>Rejection Reason:</strong> {deposit.rejectionReason}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -386,14 +555,8 @@ export default function Deposits() {
               <DollarSign className="h-16 w-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">No deposits yet</h3>
               <p className="text-gray-600 mb-6">
-                Start your investment journey by making your first deposit
+                Start your investment journey by selecting a package above
               </p>
-              <button
-                onClick={() => setShowDepositForm(true)}
-                className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg font-medium"
-              >
-                Make First Deposit
-              </button>
             </div>
           )}
         </div>

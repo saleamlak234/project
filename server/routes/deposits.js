@@ -4,7 +4,6 @@ const path = require('path');
 const Deposit = require('../models/Deposit');
 const User = require('../models/User');
 const Commission = require('../models/Commission');
-const chapaService = require('../services/chapa');
 const telegramService = require('../services/telegram');
 
 const router = express.Router();
@@ -31,7 +30,7 @@ const upload = multer({
     if (mimetype && extname) {
       return cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed'));
+      cb(new Error('Only image and PDF files are allowed'));
     }
   }
 });
@@ -52,13 +51,13 @@ router.get('/', async (req, res) => {
 // Create new deposit
 router.post('/', upload.single('receipt'), async (req, res) => {
   try {
-    const { amount, package: packageName, paymentMethod } = req.body;
+    const { amount, package: packageName, paymentMethod, merchantId } = req.body;
     const userId = req.user._id;
 
     // Validate package and amount
     const packagePrices = {
-      '7th  Stock Package': 192000,
-      '6th  Stock Package': 96000,
+      '7th Stock Package': 192000,
+      '6th Stock Package': 96000,
       '5th Stock Package': 48000,
       '4th Stock Package': 24000,
       '3rd Stock Package': 12000,
@@ -74,53 +73,21 @@ router.post('/', upload.single('receipt'), async (req, res) => {
       return res.status(400).json({ message: 'Amount does not match package price' });
     }
 
+    // Require receipt for manual transfers
+    if (!req.file) {
+      return res.status(400).json({ message: 'Payment receipt is required' });
+    }
+
     // Create deposit record
     const deposit = new Deposit({
       user: userId,
       amount: parseInt(amount),
       package: packageName,
-      paymentMethod,
-      receiptUrl: req.file ? `/uploads/receipts/${req.file.filename}` : null
+      paymentMethod: paymentMethod || 'manual_transfer',
+      receiptUrl: `/uploads/receipts/${req.file.filename}`
     });
 
     await deposit.save();
-
-    // If using Chapa payment, initiate payment
-    if (paymentMethod.startsWith('chapa_')) {
-      try {
-        const paymentData = {
-          amount: parseInt(amount),
-          currency: 'ETB',
-          email: req.user.email,
-          first_name: req.user.fullName.split(' ')[0],
-          last_name: req.user.fullName.split(' ').slice(1).join(' '),
-          phone_number: req.user.phoneNumber,
-          tx_ref: `DEP_${deposit._id}_${Date.now()}`,
-          callback_url: `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/callback`,
-          return_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/deposits`,
-          customization: {
-            title: 'Saham Trading Deposit',
-            description: `Deposit for ${packageName}`
-          }
-        };
-
-        const paymentResponse = await chapaService.initializePayment(paymentData);
-        
-        if (paymentResponse.status === 'success') {
-          deposit.chapaReference = paymentData.tx_ref;
-          await deposit.save();
-          
-          return res.json({
-            message: 'Payment initialized',
-            checkout_url: paymentResponse.data.checkout_url,
-            deposit
-          });
-        }
-      } catch (chapaError) {
-        console.error('Chapa payment error:', chapaError);
-        // Continue with manual processing if Chapa fails
-      }
-    }
 
     // Send notification to admin via Telegram
     await telegramService.sendToAdmin(
@@ -128,7 +95,7 @@ router.post('/', upload.single('receipt'), async (req, res) => {
       `User: ${req.user.fullName}\n` +
       `Package: ${packageName}\n` +
       `Amount: ${amount.toLocaleString()} ETB\n` +
-      `Payment: ${paymentMethod}`
+      `Payment: Manual Transfer`
     );
 
     res.status(201).json({
