@@ -21,6 +21,7 @@ const adminAuthRoutes = require('./routes/adminAuth');
 const chapaRoutes = require('./routes/chapa');
 const merchantRoutes = require('./routes/merchants');
 const transactionRoutes = require('./routes/transactions');
+const fileRoutes = require('./routes/files');
 
 // Import middleware
 const authMiddleware = require('./middleware/auth');
@@ -43,8 +44,34 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Serve static files
-app.use('/uploads', express.static(uploadsDir));
+// Serve static files with proper headers
+app.use('/uploads', express.static(uploadsDir, {
+  setHeaders: (res, path) => {
+    // Set cache headers for better performance
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
+    
+    // Set proper content types
+    const ext = path.split('.').pop().toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        res.setHeader('Content-Type', 'image/jpeg');
+        break;
+      case 'png':
+        res.setHeader('Content-Type', 'image/png');
+        break;
+      case 'gif':
+        res.setHeader('Content-Type', 'image/gif');
+        break;
+      case 'pdf':
+        res.setHeader('Content-Type', 'application/pdf');
+        break;
+      case 'webp':
+        res.setHeader('Content-Type', 'image/webp');
+        break;
+    }
+  }
+}));
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/saham-trading', {
@@ -69,6 +96,7 @@ app.use('/api/admin', authMiddleware, adminAuthMiddleware(['view_users', 'view_t
 app.use('/api/chapa', chapaRoutes);
 app.use('/api/merchants', authMiddleware, merchantRoutes);
 app.use('/api/transactions', authMiddleware, transactionRoutes);
+app.use('/api/files', fileRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
