@@ -287,7 +287,7 @@ export default function AdminFileUploadHelp() {
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <h4 className="font-semibold text-yellow-800 mb-2">Preview is Slow</h4>
               <ul className="text-yellow-700 text-sm space-y-1">
-                <li>• Large files (>5MB) may load slowly</li>
+                <li>• Large files (&gt;5MB) may load slowly</li>
                 <li>• Check your network speed</li>
                 <li>• Close other browser tabs to free memory</li>
                 <li>• Consider downloading for offline viewing</li>
