@@ -12,9 +12,13 @@ import {
   Building,
   Phone,
   CreditCard,
-  X
+  X,
+  Eye,
+  FileText,
+  Image as ImageIcon
 } from 'lucide-react';
 import axios from 'axios';
+import ImagePreview from '../../components/ImagePreview';
 
 interface Transaction {
   id: string;
@@ -50,6 +54,7 @@ export default function AdminTransactionPreview() {
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [showImagePreview, setShowImagePreview] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -109,6 +114,14 @@ export default function AdminTransactionPreview() {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download failed:', error);
+      // Fallback to direct link
+      const link = document.createElement('a');
+      link.href = transaction.receiptUrl;
+      link.download = `receipt-${transaction.id}`;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -137,6 +150,10 @@ export default function AdminTransactionPreview() {
   const isImage = (url: string) => {
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
     return imageExtensions.some(ext => url.toLowerCase().includes(ext));
+  };
+
+  const isPDF = (url: string) => {
+    return url.toLowerCase().includes('.pdf');
   };
 
   if (loading) {
@@ -381,15 +398,21 @@ export default function AdminTransactionPreview() {
                 
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   {isImage(transaction.receiptUrl) ? (
-                    <img
-                      src={transaction.receiptUrl}
-                      alt="Receipt"
-                      className="w-full h-auto max-h-96 object-contain"
-                    />
-                  ) : (
+                    <div className="relative group">
+                      <img
+                        src={transaction.receiptUrl}
+                        alt="Receipt"
+                        className="w-full h-auto max-h-96 object-contain cursor-pointer"
+                        onClick={() => setShowImagePreview(true)}
+                      />
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all flex items-center justify-center">
+                        <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
+                  ) : isPDF(transaction.receiptUrl) ? (
                     <div className="p-8 text-center">
                       <div className="bg-red-100 p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                        <DollarSign className="h-8 w-8 text-red-600" />
+                        <FileText className="h-8 w-8 text-red-600" />
                       </div>
                       <p className="text-gray-600 mb-4">PDF Receipt</p>
                       <a
@@ -398,15 +421,61 @@ export default function AdminTransactionPreview() {
                         rel="noopener noreferrer"
                         className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg inline-flex items-center space-x-2"
                       >
+                        <Eye className="h-4 w-4" />
                         <span>View PDF</span>
                       </a>
                     </div>
+                  ) : (
+                    <div className="p-8 text-center">
+                      <div className="bg-gray-100 p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                        <FileText className="h-8 w-8 text-gray-600" />
+                      </div>
+                      <p className="text-gray-600 mb-4">File Receipt</p>
+                      <a
+                        href={transaction.receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg inline-flex items-center space-x-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span>View File</span>
+                      </a>
+                    </div>
                   )}
+                </div>
+
+                {/* File Info */}
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    {isImage(transaction.receiptUrl) ? (
+                      <ImageIcon className="h-4 w-4" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
+                    <span>
+                      {isImage(transaction.receiptUrl) ? 'Image Receipt' : 
+                       isPDF(transaction.receiptUrl) ? 'PDF Receipt' : 'File Receipt'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Click to {isImage(transaction.receiptUrl) ? 'preview' : 'view'} • Right-click to save
+                  </p>
                 </div>
               </div>
             )}
           </div>
         </div>
+
+        {/* Image Preview Modal */}
+        {showImagePreview && transaction.receiptUrl && isImage(transaction.receiptUrl) && (
+          <ImagePreview
+            src={transaction.receiptUrl}
+            alt="Transaction Receipt"
+            onClose={() => setShowImagePreview(false)}
+            onDownload={downloadReceipt}
+            filename={`receipt-${transaction.id}`}
+          />
+        )}
 
         {/* Action Modal */}
         {showActionModal && (

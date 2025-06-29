@@ -17,6 +17,7 @@ export default function ReceiptPreview({
 }: ReceiptPreviewProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   const isImage = (url: string) => {
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
@@ -45,6 +46,7 @@ export default function ReceiptPreview({
       const link = document.createElement('a');
       link.href = receiptUrl;
       link.download = filename || 'receipt';
+      link.target = '_blank';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -68,6 +70,16 @@ export default function ReceiptPreview({
     if (isImage(receiptUrl)) return 'Image';
     if (isPDF(receiptUrl)) return 'PDF';
     return 'File';
+  };
+
+  const handleImageLoad = () => {
+    setImageLoaded(true);
+    setImageError(false);
+  };
+
+  const handleImageError = () => {
+    setImageError(true);
+    setImageLoaded(false);
   };
 
   return (
@@ -112,6 +124,34 @@ export default function ReceiptPreview({
         </div>
       </div>
 
+      {/* Thumbnail Preview for Images */}
+      {isImage(receiptUrl) && (
+        <div className="mt-2">
+          <div 
+            className="relative inline-block cursor-pointer group"
+            onClick={() => setShowPreview(true)}
+          >
+            <img
+              src={receiptUrl}
+              alt="Receipt thumbnail"
+              className="w-24 h-24 object-cover rounded-lg border border-gray-200 group-hover:border-primary-300 transition-colors"
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              style={{ display: imageError ? 'none' : 'block' }}
+            />
+            {imageError && (
+              <div className="w-24 h-24 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-red-500" />
+              </div>
+            )}
+            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-lg transition-all flex items-center justify-center">
+              <Eye className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">Click to preview</p>
+        </div>
+      )}
+
       {/* Image Preview Modal */}
       {showPreview && isImage(receiptUrl) && !imageError && (
         <ImagePreview
@@ -120,17 +160,6 @@ export default function ReceiptPreview({
           onClose={() => setShowPreview(false)}
           onDownload={handleDownload}
           filename={filename}
-        />
-      )}
-
-      {/* Hidden image to check if it loads */}
-      {isImage(receiptUrl) && (
-        <img
-          src={receiptUrl}
-          alt=""
-          className="hidden"
-          onError={() => setImageError(true)}
-          onLoad={() => setImageError(false)}
         />
       )}
     </>

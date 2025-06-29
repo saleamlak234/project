@@ -41,8 +41,16 @@ router.get('/receipts/:filename', authMiddleware, (req, res) => {
       case '.webp':
         contentType = 'image/webp';
         break;
+      case '.bmp':
+        contentType = 'image/bmp';
+        break;
     }
 
+    // Set CORS headers for cross-origin requests
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', fileSize);
     res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
@@ -109,7 +117,7 @@ router.get('/receipts/:filename/info', authMiddleware, (req, res) => {
     const ext = path.extname(filename).toLowerCase();
     
     let fileType = 'unknown';
-    if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'].includes(ext)) {
       fileType = 'image';
     } else if (ext === '.pdf') {
       fileType = 'pdf';
@@ -126,6 +134,52 @@ router.get('/receipts/:filename/info', authMiddleware, (req, res) => {
   } catch (error) {
     console.error('File info error:', error);
     res.status(500).json({ message: 'Error getting file info' });
+  }
+});
+
+// Serve files without authentication for public access (if needed)
+router.get('/public/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(__dirname, '../uploads/receipts', filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    const ext = path.extname(filename).toLowerCase();
+    let contentType = 'application/octet-stream';
+    
+    switch (ext) {
+      case '.jpg':
+      case '.jpeg':
+        contentType = 'image/jpeg';
+        break;
+      case '.png':
+        contentType = 'image/png';
+        break;
+      case '.gif':
+        contentType = 'image/gif';
+        break;
+      case '.pdf':
+        contentType = 'application/pdf';
+        break;
+      case '.webp':
+        contentType = 'image/webp';
+        break;
+      case '.bmp':
+        contentType = 'image/bmp';
+        break;
+    }
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    
+    const stream = fs.createReadStream(filePath);
+    stream.pipe(res);
+  } catch (error) {
+    console.error('Public file serve error:', error);
+    res.status(500).json({ message: 'Error serving file' });
   }
 });
 
