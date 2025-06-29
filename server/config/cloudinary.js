@@ -1,5 +1,4 @@
 const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 
 // Configure Cloudinary
@@ -9,26 +8,8 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Configure Cloudinary storage for multer
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'saham-trading/receipts',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'webp', 'bmp'],
-    resource_type: 'auto',
-    transformation: [
-      {
-        quality: 'auto',
-        fetch_format: 'auto'
-      }
-    ],
-    public_id: (req, file) => {
-      const timestamp = Date.now();
-      const random = Math.round(Math.random() * 1E9);
-      return `receipt-${timestamp}-${random}`;
-    }
-  },
-});
+// Configure multer for memory storage (no local file storage)
+const storage = multer.memoryStorage();
 
 // File filter function
 const fileFilter = (req, file, cb) => {
@@ -43,7 +24,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Create multer upload middleware
+// Create multer upload middleware with memory storage
 const upload = multer({
   storage: storage,
   limits: {
@@ -52,7 +33,7 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
-// Helper functions
+// Helper function to upload buffer to Cloudinary
 const uploadToCloudinary = async (buffer, options = {}) => {
   return new Promise((resolve, reject) => {
     const uploadOptions = {
@@ -60,6 +41,13 @@ const uploadToCloudinary = async (buffer, options = {}) => {
       resource_type: 'auto',
       quality: 'auto',
       fetch_format: 'auto',
+      transformation: [
+        {
+          quality: 'auto',
+          fetch_format: 'auto'
+        }
+      ],
+      public_id: `receipt-${Date.now()}-${Math.round(Math.random() * 1E9)}`,
       ...options
     };
 
@@ -67,6 +55,7 @@ const uploadToCloudinary = async (buffer, options = {}) => {
       uploadOptions,
       (error, result) => {
         if (error) {
+          console.error('Cloudinary upload error:', error);
           reject(error);
         } else {
           resolve(result);
@@ -76,6 +65,37 @@ const uploadToCloudinary = async (buffer, options = {}) => {
   });
 };
 
+// Helper function to upload file directly from multer
+const uploadFileToCloudinary = async (file, options = {}) => {
+  if (!file || !file.buffer) {
+    throw new Error('No file buffer provided');
+  }
+
+  try {
+    const result = await uploadToCloudinary(file.buffer, {
+      original_filename: file.originalname,
+      ...options
+    });
+
+    return {
+      public_id: result.public_id,
+      secure_url: result.secure_url,
+      original_filename: file.originalname,
+      format: result.format,
+      resource_type: result.resource_type,
+      bytes: result.bytes,
+      width: result.width,
+      height: result.height,
+      created_at: result.created_at,
+      url: result.url
+    };
+  } catch (error) {
+    console.error('Error uploading to Cloudinary:', error);
+    throw new Error('Failed to upload file to Cloudinary');
+  }
+};
+
+// Delete file from Cloudinary
 const deleteFromCloudinary = async (publicId) => {
   try {
     const result = await cloudinary.uploader.destroy(publicId);
@@ -86,7 +106,10 @@ const deleteFromCloudinary = async (publicId) => {
   }
 };
 
+// Get optimized URL
 const getOptimizedUrl = (publicId, options = {}) => {
+  if (!publicId) return null;
+  
   return cloudinary.url(publicId, {
     quality: 'auto',
     fetch_format: 'auto',
@@ -94,7 +117,10 @@ const getOptimizedUrl = (publicId, options = {}) => {
   });
 };
 
+// Get thumbnail URL
 const getThumbnailUrl = (publicId, width = 200, height = 200) => {
+  if (!publicId) return null;
+  
   return cloudinary.url(publicId, {
     width: width,
     height: height,
@@ -104,11 +130,34 @@ const getThumbnailUrl = (publicId, width = 200, height = 200) => {
   });
 };
 
+// Get file info from Cloudinary
+const getFileInfo = async (publicId) => {
+  try {
+    const result = await cloudinary.api.resource(publicId);
+    return {
+      public_id: result.public_id,
+      format: result.format,
+      resource_type: result.resource_type,
+      bytes: result.bytes,
+      width: result.width,
+      height: result.height,
+      created_at: result.created_at,
+      secure_url: result.secure_url,
+      url: result.url
+    };
+  } catch (error) {
+    console.error('Error getting file info from Cloudinary:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   cloudinary,
   upload,
   uploadToCloudinary,
+  uploadFileToCloudinary,
   deleteFromCloudinary,
   getOptimizedUrl,
-  getThumbnailUrl
+  getThumbnailUrl,
+  getFileInfo
 };

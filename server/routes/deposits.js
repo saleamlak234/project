@@ -3,7 +3,7 @@ const Deposit = require('../models/Deposit');
 const User = require('../models/User');
 const Commission = require('../models/Commission');
 const telegramService = require('../services/telegram');
-const { upload } = require('../config/cloudinary');
+const { upload, uploadFileToCloudinary } = require('../config/cloudinary');
 
 const router = express.Router();
 
@@ -50,44 +50,61 @@ router.post('/', upload.single('receipt'), async (req, res) => {
       return res.status(400).json({ message: 'Payment receipt is required' });
     }
 
+    console.log('Processing deposit with receipt upload...');
+
+    // Upload file to Cloudinary
+    const uploadResult = await uploadFileToCloudinary(req.file);
+
+    console.log('Receipt uploaded to Cloudinary:', uploadResult.public_id);
+
     // Create deposit record with Cloudinary URL
     const deposit = new Deposit({
       user: userId,
       amount: parseInt(amount),
       package: packageName,
       paymentMethod: paymentMethod || 'manual_transfer',
-      receiptUrl: req.file.secure_url,
-      receiptPublicId: req.file.public_id,
+      receiptUrl: uploadResult.secure_url,
+      receiptPublicId: uploadResult.public_id,
       receiptMetadata: {
-        originalName: req.file.original_filename,
-        format: req.file.format,
-        size: req.file.bytes,
+        originalName: uploadResult.original_filename,
+        format: uploadResult.format,
+        size: uploadResult.bytes,
         uploadedAt: new Date()
       }
     });
 
     await deposit.save();
 
+    console.log('Deposit created successfully:', deposit._id);
+
     // Send notification to admin via Telegram
-    await telegramService.sendToAdmin(
-      `💰 New deposit request:\n` +
-      `User: ${req.user.fullName}\n` +
-      `Package: ${packageName}\n` +
-      `Amount: ${amount.toLocaleString()} ETB\n` +
-      `Payment: Manual Transfer\n` +
-      `Receipt: ${req.file.secure_url}`
-    );
+    try {
+      await telegramService.sendToAdmin(
+        `💰 New deposit request:\n` +
+        `User: ${req.user.fullName}\n` +
+        `Package: ${packageName}\n` +
+        `Amount: ${amount.toLocaleString()} ETB\n` +
+        `Payment: Manual Transfer\n` +
+        `Receipt: ${uploadResult.secure_url}`
+      );
+    } catch (telegramError) {
+      console.error('Failed to send Telegram notification:', telegramError);
+      // Don't fail the deposit creation if Telegram fails
+    }
 
     res.status(201).json({
       message: 'Deposit request created successfully',
       deposit: {
         ...deposit.toObject(),
-        receiptThumbnail: req.file.secure_url.replace('/upload/', '/upload/w_200,h_200,c_fill/')
+        receiptThumbnail: uploadResult.secure_url.replace('/upload/', '/upload/w_200,h_200,c_fill/')
       }
     });
   } catch (error) {
     console.error('Create deposit error:', error);
-    res.status(500).json({ message: 'Server error creating deposit' });
+    res.status(500).json({ 
+      message: 'Server error creating deposit',
+      error: error.message 
+    });
   }
 });
 
@@ -128,13 +145,17 @@ async function processDepositCommissions(deposit) {
 
       // Send notification
       if (currentUser.telegramChatId) {
-        await telegramService.sendMessage(
-          currentUser.telegramChatId,
-          `💰 Commission earned!\n` +
-          `Amount: ${commissionAmount.toLocaleString()} ETB\n` +
-          `Level: ${level}\n` +
-          `From: ${user.fullName}'s deposit`
-        );
+        try {
+          await telegramService.sendMessage(
+            currentUser.telegramChatId,
+            `💰 Commission earned!\n` +
+            `Amount: ${commissionAmount.toLocaleString()} ETB\n` +
+            `Level: ${level}\n` +
+            `From: ${user.fullName}'s deposit`
+          );
+        } catch (telegramError) {
+          console.error('Failed to send commission notification:', telegramError);
+        }
       }
 
       // Move to next level
