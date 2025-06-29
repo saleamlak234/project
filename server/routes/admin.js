@@ -4,6 +4,7 @@ const Deposit = require('../models/Deposit');
 const Withdrawal = require('../models/Withdrawal');
 const Commission = require('../models/Commission');
 const telegramService = require('../services/telegram');
+const bcrypt = require('bcryptjs');
 
 const router = express.Router();
 
@@ -232,11 +233,11 @@ router.get('/security-overview', async (req, res) => {
 router.get('/transactions', async (req, res) => {
   try {
     const deposits = await Deposit.find()
-      .populate('user', 'fullName email')
+      .populate('user', 'fullName email phoneNumber')
       .sort({ createdAt: -1 });
 
     const withdrawals = await Withdrawal.find()
-      .populate('user', 'fullName email')
+      .populate('user', 'fullName email phoneNumber')
       .sort({ createdAt: -1 });
 
     // Combine and format transactions
@@ -271,6 +272,60 @@ router.get('/transactions', async (req, res) => {
   } catch (error) {
     console.error('Get transactions error:', error);
     res.status(500).json({ message: 'Server error fetching transactions' });
+  }
+});
+
+// Get single transaction
+router.get('/transactions/:transactionId', async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+
+    // Try to find in deposits first
+    let transaction = await Deposit.findById(transactionId)
+      .populate('user', 'fullName email phoneNumber');
+    
+    if (transaction) {
+      return res.json({
+        transaction: {
+          id: transaction._id,
+          type: 'deposit',
+          amount: transaction.amount,
+          status: transaction.status,
+          paymentMethod: transaction.paymentMethod,
+          user: transaction.user,
+          receiptUrl: transaction.receiptUrl,
+          rejectionReason: transaction.rejectionReason,
+          createdAt: transaction.createdAt,
+          updatedAt: transaction.updatedAt
+        }
+      });
+    }
+
+    // Try withdrawals
+    transaction = await Withdrawal.findById(transactionId)
+      .populate('user', 'fullName email phoneNumber');
+    
+    if (transaction) {
+      return res.json({
+        transaction: {
+          id: transaction._id,
+          type: 'withdrawal',
+          amount: transaction.amount,
+          status: transaction.status,
+          paymentMethod: transaction.paymentMethod,
+          user: transaction.user,
+          accountDetails: transaction.accountDetails,
+          rejectionReason: transaction.rejectionReason,
+          createdAt: transaction.createdAt,
+          updatedAt: transaction.updatedAt
+        }
+      });
+    }
+
+    res.status(404).json({ message: 'Transaction not found' });
+  } catch (error) {
+    console.error('Get transaction error:', error);
+    res.status(500).json({ message: 'Server error fetching transaction' });
   }
 });
 
@@ -334,6 +389,54 @@ router.put('/transactions/:transactionId', async (req, res) => {
   } catch (error) {
     console.error('Update transaction error:', error);
     res.status(500).json({ message: 'Server error updating transaction' });
+  }
+});
+
+// Register new admin
+router.post('/register', async (req, res) => {
+  try {
+    const { fullName, email, phoneNumber, password } = req.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists with this email' });
+    }
+
+    // Generate unique referral code
+    let newReferralCode;
+    let isUnique = false;
+    while (!isUnique) {
+      newReferralCode = generateReferralCode();
+      const existing = await User.findOne({ referralCode: newReferralCode });
+      if (!existing) isUnique = true;
+    }
+
+    // Create admin user
+    const user = new User({
+      fullName,
+      email,
+      phoneNumber,
+      password,
+      role: 'admin',
+      referralCode: newReferralCode,
+      isActive: true
+    });
+
+    await user.save();
+
+    res.status(201).json({
+      message: 'Admin account created successfully',
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Admin registration error:', error);
+    res.status(500).json({ message: 'Server error during admin registration' });
   }
 });
 
@@ -425,6 +528,16 @@ async function processDepositCommissions(deposit) {
   } catch (error) {
     console.error('Commission processing error:', error);
   }
+}
+
+// Helper function to generate referral code
+function generateReferralCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }
 
 module.exports = router;

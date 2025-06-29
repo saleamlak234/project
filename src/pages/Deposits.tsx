@@ -11,7 +11,8 @@ import {
   Building,
   User,
   Copy,
-  Eye
+  Eye,
+  QrCode
 } from 'lucide-react';
 import axios from 'axios';
 import ReceiptPreview from '../components/ReceiptPreview';
@@ -47,10 +48,29 @@ const PACKAGES = [
   { name: '1st Stock Package', price: 3000, dailyReturn: 50 }
 ];
 
+// Sample merchant accounts with QR codes
+const MERCHANT_ACCOUNTS = [
+  {
+    _id: '1',
+    bankName: 'Commercial Bank of Ethiopia (CBE)',
+    accountNumber: '1000634860001',
+    accountHolder: 'Saham Trading Primary',
+    branch: 'Addis Ababa Main Branch',
+    qrCode: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzAwMCIvPgogIDxyZWN0IHg9IjEwIiB5PSIxMCIgd2lkdGg9IjE4MCIgaGVpZ2h0PSIxODAiIGZpbGw9IiNmZmYiLz4KICA8dGV4dCB4PSIxMDAiIHk9IjEwNSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjMDAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5DQkUgUVIgQ29kZTwvdGV4dD4KPC9zdmc+'
+  },
+  {
+    _id: '2',
+    bankName: 'TeleBirr Wallet',
+    accountNumber: '+251911234567',
+    accountHolder: 'Saham Trading TeleBirr',
+    branch: 'Digital Wallet',
+    qrCode: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzAwNzBmMyIvPgogIDxyZWN0IHg9IjEwIiB5PSIxMCIgd2lkdGg9IjE4MCIgaGVpZ2h0PSIxODAiIGZpbGw9IiNmZmYiLz4KICA8dGV4dCB4PSIxMDAiIHk9IjEwNSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEyIiBmaWxsPSIjMDA3MGYzIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5UZWxlQmlyciBRUjwvdGV4dD4KPC9zdmc+'
+  }
+];
+
 export default function Deposits() {
   const { user } = useAuth();
   const [deposits, setDeposits] = useState<Deposit[]>([]);
-  const [merchants, setMerchants] = useState<MerchantAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDepositForm, setShowDepositForm] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
@@ -65,7 +85,7 @@ export default function Deposits() {
   const [previewImageUrl, setPreviewImageUrl] = useState('');
 
   useEffect(() => {
-    fetchData();
+    fetchDeposits();
   }, []);
 
   useEffect(() => {
@@ -80,17 +100,12 @@ export default function Deposits() {
     }
   }, [receipt]);
 
-  const fetchData = async () => {
+  const fetchDeposits = async () => {
     try {
-      const [depositsResponse, merchantsResponse] = await Promise.all([
-        axios.get('/deposits'),
-        axios.get('/merchants')
-      ]);
-      
-      setDeposits(depositsResponse.data.deposits);
-      setMerchants(merchantsResponse.data.merchants);
+      const response = await axios.get('/deposits');
+      setDeposits(response.data.deposits);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('Failed to fetch deposits:', error);
     } finally {
       setLoading(false);
     }
@@ -142,7 +157,7 @@ export default function Deposits() {
       setSelectedMerchant(null);
       setReceipt(null);
       setReceiptPreview(null);
-      fetchData();
+      fetchDeposits();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to create deposit');
     } finally {
@@ -243,10 +258,10 @@ export default function Deposits() {
 
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Select Merchant Account
+                    Select Payment Method
                   </h3>
                   <div className="space-y-3">
-                    {merchants.map((merchant) => (
+                    {MERCHANT_ACCOUNTS.map((merchant) => (
                       <div
                         key={merchant._id}
                         onClick={() => handleMerchantSelect(merchant)}
@@ -257,7 +272,11 @@ export default function Deposits() {
                         }`}
                       >
                         <div className="flex items-center space-x-3">
-                          <Building className="h-5 w-5 text-primary-600" />
+                          {merchant.bankName.includes('TeleBirr') ? (
+                            <QrCode className="h-5 w-5 text-blue-600" />
+                          ) : (
+                            <Building className="h-5 w-5 text-primary-600" />
+                          )}
                           <div>
                             <p className="font-semibold text-gray-900">{merchant.bankName}</p>
                             <p className="text-sm text-gray-600">{merchant.accountHolder}</p>
@@ -310,14 +329,14 @@ export default function Deposits() {
                 {/* Merchant Account Details */}
                 <div className="bg-gray-50 rounded-lg p-6 mb-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Transfer to this Account
+                    {selectedMerchant.bankName.includes('TeleBirr') ? 'Send to this TeleBirr Account' : 'Transfer to this Account'}
                   </h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Bank Name
+                          {selectedMerchant.bankName.includes('TeleBirr') ? 'Service Provider' : 'Bank Name'}
                         </label>
                         <div className="flex items-center justify-between p-3 bg-white rounded border">
                           <span className="font-semibold">{selectedMerchant.bankName}</span>
@@ -332,7 +351,7 @@ export default function Deposits() {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Account Number
+                          {selectedMerchant.bankName.includes('TeleBirr') ? 'Phone Number' : 'Account Number'}
                         </label>
                         <div className="flex items-center justify-between p-3 bg-white rounded border">
                           <span className="font-mono font-semibold">{selectedMerchant.accountNumber}</span>
@@ -360,27 +379,29 @@ export default function Deposits() {
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Branch
-                        </label>
-                        <div className="flex items-center justify-between p-3 bg-white rounded border">
-                          <span>{selectedMerchant.branch}</span>
-                          <button
-                            onClick={() => copyToClipboard(selectedMerchant.branch, 'branch')}
-                            className="text-primary-600 hover:text-primary-700"
-                          >
-                            {copied === 'branch' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                          </button>
+                      {!selectedMerchant.bankName.includes('TeleBirr') && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Branch
+                          </label>
+                          <div className="flex items-center justify-between p-3 bg-white rounded border">
+                            <span>{selectedMerchant.branch}</span>
+                            <button
+                              onClick={() => copyToClipboard(selectedMerchant.branch, 'branch')}
+                              className="text-primary-600 hover:text-primary-700"
+                            >
+                              {copied === 'branch' ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* QR Code */}
                     {selectedMerchant.qrCode && (
                       <div className="flex flex-col items-center">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          QR Code
+                          QR Code for {selectedMerchant.bankName.includes('TeleBirr') ? 'TeleBirr Payment' : 'Bank Transfer'}
                         </label>
                         <div className="bg-white p-4 rounded-lg border cursor-pointer" onClick={() => handleImagePreview(selectedMerchant.qrCode!)}>
                           <img 
@@ -390,7 +411,7 @@ export default function Deposits() {
                           />
                         </div>
                         <p className="text-xs text-gray-500 mt-2 text-center">
-                          Click to view full size
+                          {selectedMerchant.bankName.includes('TeleBirr') ? 'Scan with TeleBirr app' : 'Scan with banking app'}
                         </p>
                       </div>
                     )}
@@ -400,7 +421,7 @@ export default function Deposits() {
                     <div className="flex items-center space-x-2">
                       <DollarSign className="h-5 w-5 text-yellow-600" />
                       <span className="font-semibold text-yellow-800">
-                        Amount to Transfer: {selectedPackage.price.toLocaleString()} ETB
+                        Amount to {selectedMerchant.bankName.includes('TeleBirr') ? 'Send' : 'Transfer'}: {selectedPackage.price.toLocaleString()} ETB
                       </span>
                     </div>
                   </div>
@@ -472,6 +493,7 @@ export default function Deposits() {
                     >
                       Cancel
                     </button>
+                
                     <button
                       type="submit"
                       disabled={submitting || !receipt}

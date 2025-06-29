@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   DollarSign, 
   Search, 
@@ -14,8 +15,6 @@ import {
   X
 } from 'lucide-react';
 import axios from 'axios';
-import ReceiptPreview from '../../components/ReceiptPreview';
-import ImagePreview from '../../components/ImagePreview';
 
 interface Transaction {
   id: string;
@@ -41,11 +40,6 @@ export default function AdminTransactions() {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [showImagePreview, setShowImagePreview] = useState(false);
-  const [previewImageUrl, setPreviewImageUrl] = useState('');
-  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     fetchTransactions();
@@ -60,43 +54,6 @@ export default function AdminTransactions() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleTransactionAction = async (transactionId: string, action: 'approve' | 'reject', rejectionReason?: string) => {
-    setActionLoading(true);
-    try {
-      await axios.put(`/admin/transactions/${transactionId}`, {
-        action,
-        rejectionReason
-      });
-      
-      setTransactions(transactions.map(transaction => 
-        transaction.id === transactionId 
-          ? { 
-              ...transaction, 
-              status: action === 'approve' ? 'completed' : 'rejected',
-              rejectionReason: action === 'reject' ? rejectionReason : undefined
-            } 
-          : transaction
-      ));
-      
-      setShowTransactionModal(false);
-      setSelectedTransaction(null);
-    } catch (error) {
-      console.error('Failed to update transaction:', error);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleImagePreview = (imageUrl: string) => {
-    setPreviewImageUrl(imageUrl);
-    setShowImagePreview(true);
-  };
-
-  const isImage = (url: string) => {
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
-    return imageExtensions.some(ext => url.toLowerCase().includes(ext));
   };
 
   const filteredTransactions = transactions.filter(transaction => {
@@ -261,9 +218,6 @@ export default function AdminTransactions() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Receipt
-                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
@@ -322,45 +276,14 @@ export default function AdminTransactions() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(transaction.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {transaction.receiptUrl ? (
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => {
-                              if (isImage(transaction.receiptUrl!)) {
-                                handleImagePreview(transaction.receiptUrl!);
-                              } else {
-                                window.open(transaction.receiptUrl, '_blank');
-                              }
-                            }}
-                            className="text-primary-600 hover:text-primary-900 flex items-center space-x-1"
-                          >
-                            <Eye className="h-4 w-4" />
-                            <span className="text-sm">View</span>
-                          </button>
-                          <a
-                            href={transaction.receiptUrl}
-                            download={`receipt-${transaction.id}`}
-                            className="text-gray-600 hover:text-gray-900 flex items-center space-x-1"
-                          >
-                            <Download className="h-4 w-4" />
-                            <span className="text-sm">Download</span>
-                          </a>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-gray-400">No receipt</span>
-                      )}
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => {
-                          setSelectedTransaction(transaction);
-                          setShowTransactionModal(true);
-                        }}
-                        className="text-primary-600 hover:text-primary-900"
+                      <Link
+                        to={`/admin/transactions/${transaction.id}`}
+                        className="text-primary-600 hover:text-primary-900 flex items-center justify-end space-x-1"
                       >
                         <Eye className="h-4 w-4" />
-                      </button>
+                        <span>View</span>
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -368,180 +291,6 @@ export default function AdminTransactions() {
             </table>
           </div>
         </div>
-
-        {/* Image Preview Modal */}
-        {showImagePreview && (
-          <ImagePreview
-            src={previewImageUrl}
-            alt="Receipt"
-            onClose={() => setShowImagePreview(false)}
-          />
-        )}
-
-        {/* Transaction Details Modal */}
-        {showTransactionModal && selectedTransaction && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl max-w-2xl w-full max-h-screen overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">Transaction Details</h2>
-                  <button
-                    onClick={() => setShowTransactionModal(false)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
-                </div>
-
-                <div className="space-y-6">
-                  {/* Transaction Info */}
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-gray-900 mb-3">Transaction Information</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Type</label>
-                        <p className="text-gray-900 capitalize">{selectedTransaction.type}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Amount</label>
-                        <p className="text-gray-900 font-semibold">
-                          {selectedTransaction.amount.toLocaleString()} ETB
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Payment Method</label>
-                        <p className="text-gray-900">{selectedTransaction.paymentMethod}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Status</label>
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedTransaction.status)}`}>
-                          {selectedTransaction.status.charAt(0).toUpperCase() + selectedTransaction.status.slice(1)}
-                        </span>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Created</label>
-                        <p className="text-gray-900">
-                          {new Date(selectedTransaction.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Updated</label>
-                        <p className="text-gray-900">
-                          {new Date(selectedTransaction.updatedAt).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* User Info */}
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-gray-900 mb-3">User Information</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Name</label>
-                        <p className="text-gray-900">{selectedTransaction.user.fullName}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Email</label>
-                        <p className="text-gray-900">{selectedTransaction.user.email}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Account Details for Withdrawals */}
-                  {selectedTransaction.type === 'withdrawal' && selectedTransaction.accountDetails && (
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h3 className="font-semibold text-gray-900 mb-3">Account Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {selectedTransaction.accountDetails.bankName && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">Bank Name</label>
-                            <p className="text-gray-900">{selectedTransaction.accountDetails.bankName}</p>
-                          </div>
-                        )}
-                        {selectedTransaction.accountDetails.accountNumber && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">Account Number</label>
-                            <p className="text-gray-900">{selectedTransaction.accountDetails.accountNumber}</p>
-                          </div>
-                        )}
-                        {selectedTransaction.accountDetails.phoneNumber && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">Phone Number</label>
-                            <p className="text-gray-900">{selectedTransaction.accountDetails.phoneNumber}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Receipt */}
-                  {selectedTransaction.receiptUrl && (
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h3 className="font-semibold text-gray-900 mb-3">Receipt</h3>
-                      <div className="flex items-center space-x-4">
-                        <button
-                          onClick={() => {
-                            if (isImage(selectedTransaction.receiptUrl!)) {
-                              handleImagePreview(selectedTransaction.receiptUrl!);
-                            } else {
-                              window.open(selectedTransaction.receiptUrl, '_blank');
-                            }
-                          }}
-                          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          <span>View Receipt</span>
-                        </button>
-                        <a
-                          href={selectedTransaction.receiptUrl}
-                          download={`receipt-${selectedTransaction.id}`}
-                          className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
-                        >
-                          <Download className="h-4 w-4" />
-                          <span>Download</span>
-                        </a>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Rejection Reason */}
-                  {selectedTransaction.status === 'rejected' && selectedTransaction.rejectionReason && (
-                    <div className="bg-red-50 rounded-lg p-4">
-                      <h3 className="font-semibold text-red-900 mb-3">Rejection Reason</h3>
-                      <p className="text-red-800">{selectedTransaction.rejectionReason}</p>
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  {selectedTransaction.status === 'pending' && (
-                    <div className="flex space-x-4">
-                      <button
-                        onClick={() => handleTransactionAction(selectedTransaction.id, 'approve')}
-                        disabled={actionLoading}
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50"
-                      >
-                        {actionLoading ? 'Processing...' : 'Approve'}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const reason = prompt('Enter rejection reason:');
-                          if (reason) {
-                            handleTransactionAction(selectedTransaction.id, 'reject', reason);
-                          }
-                        }}
-                        disabled={actionLoading}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

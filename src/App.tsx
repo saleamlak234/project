@@ -16,6 +16,9 @@ import MLMTree from './pages/MLMTree';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminTransactions from './pages/admin/AdminTransactions';
+import AdminTransactionPreview from './pages/admin/AdminTransactionPreview';
+import AdminRegister from './pages/admin/AdminRegister';
+import AdminProfile from './pages/admin/AdminProfile';
 import LoadingSpinner from './components/LoadingSpinner';
 
 function App() {
@@ -46,6 +49,9 @@ function App() {
         <Route path="admin" element={user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/dashboard" />} />
         <Route path="admin/users" element={user?.role === 'admin' ? <AdminUsers /> : <Navigate to="/dashboard" />} />
         <Route path="admin/transactions" element={user?.role === 'admin' ? <AdminTransactions /> : <Navigate to="/dashboard" />} />
+        <Route path="admin/transactions/:id" element={user?.role === 'admin' ? <AdminTransactionPreview /> : <Navigate to="/dashboard" />} />
+        <Route path="admin/register" element={user?.role === 'admin' ? <AdminRegister /> : <Navigate to="/dashboard" />} />
+        <Route path="admin/profile" element={user?.role === 'admin' ? <AdminProfile /> : <Navigate to="/dashboard" />} />
       </Route>
     </Routes>
   );

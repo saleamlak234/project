@@ -11,7 +11,9 @@ import {
   Users,
   Award,
   BarChart3,
-  Shield
+  Shield,
+  Settings,
+  UserPlus
 } from 'lucide-react';
 import PackageSlider from './PackageSlider';
 
@@ -123,14 +125,33 @@ export default function Header() {
                         Commissions
                       </Link>
                       {user.role === 'admin' && (
-                        <Link
-                          to="/admin"
-                          className="flex items-center px-4 py-2 text-sm text-gold-600 hover:bg-gold-50"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          <Shield className="h-4 w-4 mr-3" />
-                          Admin Panel
-                        </Link>
+                        <>
+                          <div className="border-t border-gray-100 my-2"></div>
+                          <Link
+                            to="/admin"
+                            className="flex items-center px-4 py-2 text-sm text-gold-600 hover:bg-gold-50"
+                            onClick={() => setIsUserMenuOpen(false)}
+                          >
+                            <Shield className="h-4 w-4 mr-3" />
+                            Admin Panel
+                          </Link>
+                          <Link
+                            to="/admin/profile"
+                            className="flex items-center px-4 py-2 text-sm text-gold-600 hover:bg-gold-50"
+                            onClick={() => setIsUserMenuOpen(false)}
+                          >
+                            <Settings className="h-4 w-4 mr-3" />
+                            Admin Profile
+                          </Link>
+                          <Link
+                            to="/admin/register"
+                            className="flex items-center px-4 py-2 text-sm text-gold-600 hover:bg-gold-50"
+                            onClick={() => setIsUserMenuOpen(false)}
+                          >
+                            <UserPlus className="h-4 w-4 mr-3" />
+                            Create Admin
+                          </Link>
+                        </>
                       )}
                     </div>
                     
@@ -222,13 +243,29 @@ export default function Header() {
                     Profile
                   </Link>
                   {user.role === 'admin' && (
-                    <Link
-                      to="/admin"
-                      className="text-gold-600 hover:text-gold-700 transition-colors font-medium"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Admin Panel
-                    </Link>
+                    <>
+                      <Link
+                        to="/admin"
+                        className="text-gold-600 hover:text-gold-700 transition-colors font-medium"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        Admin Panel
+                      </Link>
+                      <Link
+                        to="/admin/profile"
+                        className="text-gold-600 hover:text-gold-700 transition-colors"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        Admin Profile
+                      </Link>
+                      <Link
+                        to="/admin/register"
+                        className="text-gold-600 hover:text-gold-700 transition-colors"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        Create Admin
+                      </Link>
+                    </>
                   )}
                   <button
                     onClick={() => {
