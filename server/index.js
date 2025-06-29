@@ -33,55 +33,55 @@ dotenv.config();
 
 const app = express();
 
-// CORS Configuration with credentials
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // Define allowed origins
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:5173',
-      process.env.FRONTEND_URL,
-      // Add your production domain here
-      'https://your-production-domain.com'
-    ].filter(Boolean); // Remove undefined values
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS blocked origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true, // Enable credentials (cookies, authorization headers, etc.)
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Origin',
-    'X-Requested-With',
-    'Content-Type',
-    'Accept',
-    'Authorization',
-    'Cache-Control',
-    'Pragma',
-    'X-CSRF-Token'
-  ],
-  exposedHeaders: [
-    'Content-Length',
-    'X-Foo',
-    'X-Bar'
-  ],
-  optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
-  preflightContinue: false
-};
-
-// Middleware
-app.use(cors(corsOptions));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  // CORS Configuration with credentials
+  const corsOptions = {
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      // Define allowed origins
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5173',
+        process.env.FRONTEND_URL,
+        // Add your production domain here
+        'https://your-production-domain.com'
+      ].filter(Boolean); // Remove undefined values
+      
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        console.warn(`CORS blocked origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true, // Enable credentials (cookies, authorization headers, etc.)
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'Cache-Control',
+      'Pragma',
+      'X-CSRF-Token'
+    ],
+    exposedHeaders: [
+      'Content-Length',
+      'X-Foo',
+      'X-Bar'
+    ],
+    optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
+    preflightContinue: false
+  };
+  
+  // Middleware
+  app.use(cors(corsOptions));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Create uploads directory if it doesn't exist (for backward compatibility)
 const uploadsDir = path.join(__dirname, 'uploads');
