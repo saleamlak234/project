@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "seed": "node scripts/seed.js",
-    "complete-seed": "node scripts/completeSeed.js"
+    "seed": "node scripts/completeSeed.js"
   },
   "dependencies": {
     "axios": "^1.6.7",
