@@ -12,9 +12,11 @@ import {
   Eye,
   Download,
   Calendar,
-  X
+  X,
+  HelpCircle
 } from 'lucide-react';
 import axios from 'axios';
+import AdminFileUploadHelp from './AdminFileUploadHelp';
 
 interface Transaction {
   id: string;
@@ -40,6 +42,7 @@ export default function AdminTransactions() {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     fetchTransactions();
@@ -86,6 +89,10 @@ export default function AdminTransactions() {
     }
   };
 
+  if (showHelp) {
+    return <AdminFileUploadHelp />;
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -99,8 +106,40 @@ export default function AdminTransactions() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Transaction Management</h1>
-          <p className="text-gray-600 mt-1">Review and manage deposits and withdrawals</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Transaction Management</h1>
+              <p className="text-gray-600 mt-1">Review and manage deposits and withdrawals</p>
+            </div>
+            <button
+              onClick={() => setShowHelp(true)}
+              className="flex items-center space-x-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span>File Upload Guide</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Help Banner */}
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <HelpCircle className="h-5 w-5 text-blue-600" />
+              <div>
+                <h3 className="font-semibold text-blue-800">File Preview & Upload System</h3>
+                <p className="text-blue-700 text-sm">
+                  Click "View" on any transaction to preview uploaded receipts with zoom, rotation, and download features.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowHelp(true)}
+              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+            >
+              View Full Guide →
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -218,6 +257,9 @@ export default function AdminTransactions() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Receipt
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
@@ -276,6 +318,23 @@ export default function AdminTransactions() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(transaction.createdAt).toLocaleDateString()}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {transaction.receiptUrl ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          </div>
+                          <span className="text-xs text-green-600">Available</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-2">
+                          <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                            <X className="h-4 w-4 text-gray-400" />
+                          </div>
+                          <span className="text-xs text-gray-500">None</span>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <Link
                         to={`/admin/transactions/${transaction.id}`}
@@ -289,6 +348,34 @@ export default function AdminTransactions() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Quick Tips */}
+        <div className="mt-8 bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl p-6 border border-primary-200">
+          <h3 className="text-lg font-semibold text-primary-900 mb-4">Quick Tips for File Management</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-start space-x-3">
+              <Eye className="h-5 w-5 text-primary-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-primary-800">Preview Files</h4>
+                <p className="text-sm text-primary-700">Click "View" to see uploaded receipts with zoom and rotation controls</p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-3">
+              <Download className="h-5 w-5 text-primary-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-primary-800">Download Options</h4>
+                <p className="text-sm text-primary-700">Multiple download methods available including direct download and right-click save</p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-3">
+              <HelpCircle className="h-5 w-5 text-primary-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-primary-800">Need Help?</h4>
+                <p className="text-sm text-primary-700">Click the "File Upload Guide" button for detailed instructions</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
