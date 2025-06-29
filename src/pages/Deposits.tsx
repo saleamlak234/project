@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   Plus, 
-  Upload, 
   Clock,
   CheckCircle,
   XCircle,
-  Camera,
   DollarSign,
   Building,
   User,
@@ -16,6 +14,7 @@ import {
   Smartphone
 } from 'lucide-react';
 import axios from 'axios';
+import CloudinaryUpload from '../components/CloudinaryUpload';
 import ReceiptPreview from '../components/ReceiptPreview';
 import ImagePreview from '../components/ImagePreview';
 
@@ -34,6 +33,12 @@ interface Deposit {
   package: string;
   status: 'pending' | 'completed' | 'rejected';
   receiptUrl?: string;
+  receiptPublicId?: string;
+  receiptMetadata?: {
+    originalName: string;
+    format: string;
+    size: number;
+  };
   createdAt: string;
   updatedAt: string;
   rejectionReason?: string;
@@ -202,8 +207,7 @@ export default function Deposits() {
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const [selectedMerchant, setSelectedMerchant] = useState<MerchantAccount | null>(null);
   const [showMerchantDetails, setShowMerchantDetails] = useState(false);
-  const [receipt, setReceipt] = useState<File | null>(null);
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [uploadedReceipt, setUploadedReceipt] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState('');
@@ -213,18 +217,6 @@ export default function Deposits() {
   useEffect(() => {
     fetchDeposits();
   }, []);
-
-  useEffect(() => {
-    if (receipt) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setReceiptPreview(reader.result as string);
-      };
-      reader.readAsDataURL(receipt);
-    } else {
-      setReceiptPreview(null);
-    }
-  }, [receipt]);
 
   const fetchDeposits = async () => {
     try {
@@ -253,9 +245,18 @@ export default function Deposits() {
     setTimeout(() => setCopied(''), 2000);
   };
 
+  const handleReceiptUpload = (fileData: any) => {
+    setUploadedReceipt(fileData);
+    setError('');
+  };
+
+  const handleUploadError = (error: string) => {
+    setError(error);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPackage || !selectedMerchant || !receipt) {
+    if (!selectedPackage || !selectedMerchant || !uploadedReceipt) {
       setError('Please select a package, merchant account, and upload a receipt');
       return;
     }
@@ -269,11 +270,20 @@ export default function Deposits() {
       formData.append('package', selectedPackage.name);
       formData.append('paymentMethod', 'manual_transfer');
       formData.append('merchantId', selectedMerchant._id);
-      formData.append('receipt', receipt);
+      formData.append('receiptUrl', uploadedReceipt.secure_url);
+      formData.append('receiptPublicId', uploadedReceipt.public_id);
 
-      await axios.post('/deposits', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
+      await axios.post('/deposits', {
+        amount: selectedPackage.price,
+        package: selectedPackage.name,
+        paymentMethod: 'manual_transfer',
+        merchantId: selectedMerchant._id,
+        receiptUrl: uploadedReceipt.secure_url,
+        receiptPublicId: uploadedReceipt.public_id,
+        receiptMetadata: {
+          originalName: uploadedReceipt.original_filename,
+          format: uploadedReceipt.format,
+          size: uploadedReceipt.bytes
         }
       });
 
@@ -281,8 +291,7 @@ export default function Deposits() {
       setShowMerchantDetails(false);
       setSelectedPackage(null);
       setSelectedMerchant(null);
-      setReceipt(null);
-      setReceiptPreview(null);
+      setUploadedReceipt(null);
       fetchDeposits();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to create deposit');
@@ -588,49 +597,13 @@ export default function Deposits() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Upload Payment Receipt *
                     </label>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                      <input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        onChange={(e) => setReceipt(e.target.files?.[0] || null)}
-                        className="hidden"
-                        id="receipt-upload"
-                        required
-                      />
-                      <label htmlFor="receipt-upload" className="cursor-pointer">
-                        {receiptPreview ? (
-                          <div className="space-y-4">
-                            <div className="relative">
-                              <img
-                                src={receiptPreview}
-                                alt="Receipt preview"
-                                className="max-w-full max-h-48 mx-auto rounded-lg cursor-pointer"
-                                onClick={() => handleImagePreview(receiptPreview)}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleImagePreview(receiptPreview)}
-                                className="absolute top-2 right-2 bg-white bg-opacity-80 hover:bg-opacity-100 rounded-full p-2 transition-all"
-                              >
-                                <Eye className="h-4 w-4 text-gray-600" />
-                              </button>
-                            </div>
-                            <p className="text-gray-600">{receipt?.name}</p>
-                            <p className="text-sm text-gray-500">Click image to preview or here to change</p>
-                          </div>
-                        ) : (
-                          <>
-                            <Camera className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600">
-                              Click to upload payment receipt
-                            </p>
-                            <p className="text-sm text-gray-500 mt-1">
-                              PNG, JPG, PDF up to 10MB
-                            </p>
-                          </>
-                        )}
-                      </label>
-                    </div>
+                    <CloudinaryUpload
+                      onUploadSuccess={handleReceiptUpload}
+                      onUploadError={handleUploadError}
+                      acceptedTypes="image/*,application/pdf"
+                      maxSize={10 * 1024 * 1024}
+                      className="w-full"
+                    />
                     
                     {selectedMerchant.bankName.includes('TeleBirr') && (
                       <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -652,8 +625,7 @@ export default function Deposits() {
                         setShowDepositForm(false);
                         setSelectedPackage(null);
                         setSelectedMerchant(null);
-                        setReceipt(null);
-                        setReceiptPreview(null);
+                        setUploadedReceipt(null);
                       }}
                       className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-3 rounded-lg font-medium"
                     >
@@ -662,7 +634,7 @@ export default function Deposits() {
                 
                     <button
                       type="submit"
-                      disabled={submitting || !receipt}
+                      disabled={submitting || !uploadedReceipt}
                       className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-4 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                     >
                       {submitting ? (

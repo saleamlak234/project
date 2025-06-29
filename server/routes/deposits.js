@@ -1,39 +1,11 @@
 const express = require('express');
-const multer = require('multer');
-const path = require('path');
 const Deposit = require('../models/Deposit');
 const User = require('../models/User');
 const Commission = require('../models/Commission');
 const telegramService = require('../services/telegram');
+const { upload } = require('../config/cloudinary');
 
 const router = express.Router();
-
-// Multer configuration for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'server/uploads/receipts/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'receipt-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|pdf/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Only image and PDF files are allowed'));
-    }
-  }
-});
 
 // Get user deposits
 router.get('/', async (req, res) => {
@@ -48,7 +20,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Create new deposit
+// Create new deposit with Cloudinary upload
 router.post('/', upload.single('receipt'), async (req, res) => {
   try {
     const { amount, package: packageName, paymentMethod, merchantId } = req.body;
@@ -73,18 +45,25 @@ router.post('/', upload.single('receipt'), async (req, res) => {
       return res.status(400).json({ message: 'Amount does not match package price' });
     }
 
-    // Require receipt for manual transfers
+    // Require receipt upload
     if (!req.file) {
       return res.status(400).json({ message: 'Payment receipt is required' });
     }
 
-    // Create deposit record
+    // Create deposit record with Cloudinary URL
     const deposit = new Deposit({
       user: userId,
       amount: parseInt(amount),
       package: packageName,
       paymentMethod: paymentMethod || 'manual_transfer',
-      receiptUrl: `/uploads/receipts/${req.file.filename}`
+      receiptUrl: req.file.secure_url,
+      receiptPublicId: req.file.public_id,
+      receiptMetadata: {
+        originalName: req.file.original_filename,
+        format: req.file.format,
+        size: req.file.bytes,
+        uploadedAt: new Date()
+      }
     });
 
     await deposit.save();
@@ -95,12 +74,16 @@ router.post('/', upload.single('receipt'), async (req, res) => {
       `User: ${req.user.fullName}\n` +
       `Package: ${packageName}\n` +
       `Amount: ${amount.toLocaleString()} ETB\n` +
-      `Payment: Manual Transfer`
+      `Payment: Manual Transfer\n` +
+      `Receipt: ${req.file.secure_url}`
     );
 
     res.status(201).json({
       message: 'Deposit request created successfully',
-      deposit
+      deposit: {
+        ...deposit.toObject(),
+        receiptThumbnail: req.file.secure_url.replace('/upload/', '/upload/w_200,h_200,c_fill/')
+      }
     });
   } catch (error) {
     console.error('Create deposit error:', error);

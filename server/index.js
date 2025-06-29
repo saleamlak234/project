@@ -2,7 +2,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
@@ -22,6 +21,7 @@ const chapaRoutes = require('./routes/chapa');
 const merchantRoutes = require('./routes/merchants');
 const transactionRoutes = require('./routes/transactions');
 const fileRoutes = require('./routes/files');
+const cloudinaryRoutes = require('./routes/cloudinary');
 
 // Import middleware
 const authMiddleware = require('./middleware/auth');
@@ -38,13 +38,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Create uploads directory if it doesn't exist
+// Create uploads directory if it doesn't exist (for backward compatibility)
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Serve static files with proper headers
+// Serve static files with proper headers (for backward compatibility)
 app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res, path) => {
     // Set cache headers for better performance
@@ -97,6 +97,7 @@ app.use('/api/chapa', chapaRoutes);
 app.use('/api/merchants', authMiddleware, merchantRoutes);
 app.use('/api/transactions', authMiddleware, transactionRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/cloudinary', cloudinaryRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -106,6 +107,21 @@ app.get('/api/health', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
+  
+  // Handle Cloudinary errors
+  if (err.message && err.message.includes('cloudinary')) {
+    return res.status(400).json({ message: 'File upload error: ' + err.message });
+  }
+  
+  // Handle multer errors
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ message: 'File too large. Maximum size is 10MB.' });
+  }
+  
+  if (err.message === 'Only image and PDF files are allowed') {
+    return res.status(400).json({ message: err.message });
+  }
+  
   res.status(500).json({ message: 'Something went wrong!' });
 });
 
@@ -117,6 +133,7 @@ app.use('*', (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('Cloudinary integration enabled for file uploads');
 });
 
 module.exports = app;

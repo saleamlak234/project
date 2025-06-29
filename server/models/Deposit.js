@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+
 const depositSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -13,12 +14,12 @@ const depositSchema = new mongoose.Schema({
   package: {
     type: String,
     required: true,
-    enum: ['7th Stock Package', '6th Stock Package', '5th Stock Package', '4th Stock Package','3rd Stock package','2nd Stock package','1st Stock package']
+    enum: ['7th Stock Package', '6th Stock Package', '5th Stock Package', '4th Stock Package','3rd Stock Package','2nd Stock Package','1st Stock Package']
   },
   paymentMethod: {
     type: String,
     required: true,
-    enum: ['chapa_cbe', 'chapa_telebirr']
+    enum: ['manual_transfer', 'bank_transfer', 'telebirr']
   },
   status: {
     type: String,
@@ -28,6 +29,16 @@ const depositSchema = new mongoose.Schema({
   receiptUrl: {
     type: String,
     default: null
+  },
+  receiptPublicId: {
+    type: String,
+    default: null
+  },
+  receiptMetadata: {
+    originalName: String,
+    format: String,
+    size: Number,
+    uploadedAt: Date
   },
   chapaReference: {
     type: String,
@@ -66,6 +77,30 @@ depositSchema.methods.getMonthlyReturn = function() {
     '1st Stock Package': 3000
   };
   return returnRates[this.package] || 0;
+};
+
+// Get optimized receipt URL
+depositSchema.methods.getOptimizedReceiptUrl = function(options = {}) {
+  if (!this.receiptUrl) return null;
+  
+  const baseUrl = this.receiptUrl;
+  const transformations = [];
+  
+  if (options.width) transformations.push(`w_${options.width}`);
+  if (options.height) transformations.push(`h_${options.height}`);
+  if (options.quality) transformations.push(`q_${options.quality}`);
+  if (options.format) transformations.push(`f_${options.format}`);
+  
+  if (transformations.length > 0) {
+    return baseUrl.replace('/upload/', `/upload/${transformations.join(',')}/`);
+  }
+  
+  return baseUrl;
+};
+
+// Get thumbnail URL
+depositSchema.methods.getThumbnailUrl = function() {
+  return this.getOptimizedReceiptUrl({ width: 200, height: 200, quality: 'auto' });
 };
 
 module.exports = mongoose.model('Deposit', depositSchema);
