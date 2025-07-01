@@ -1,0 +1,75 @@
+{
+  "name": "Saham Trading Backend",
+  "description": "Backend API for Saham Trading MLM Platform",
+  "repository": "https://github.com/your-username/saham-trading-backend",
+  "logo": "https://node-js-sample.herokuapp.com/node.svg",
+  "keywords": ["node", "express", "mongodb", "mlm", "trading"],
+  "image": "heroku/nodejs",
+  "env": {
+    "NODE_ENV": {
+      "description": "Node environment",
+      "value": "production"
+    },
+    "MONGODB_URI": {
+      "description": "MongoDB connection string",
+      "required": true
+    },
+    "JWT_SECRET": {
+      "description": "JWT secret key for authentication",
+      "generator": "secret"
+    },
+    "FRONTEND_URL": {
+      "description": "Frontend URL for CORS",
+      "value": "https://glistening-blini-b81e99.netlify.app"
+    },
+    "EMAIL_USER": {
+      "description": "Gmail email for sending emails",
+      "required": true
+    },
+    "EMAIL_PASS": {
+      "description": "Gmail app password",
+      "required": true
+    },
+    "CHAPA_SECRET_KEY": {
+      "description": "Chapa payment gateway secret key",
+      "required": false
+    },
+    "CHAPA_PUBLIC_KEY": {
+      "description": "Chapa payment gateway public key",
+      "required": false
+    },
+    "TELEGRAM_BOT_TOKEN": {
+      "description": "Telegram bot token for notifications",
+      "required": false
+    },
+    "TELEGRAM_ADMIN_CHAT_ID": {
+      "description": "Telegram admin chat ID",
+      "required": false
+    },
+    "CLOUDINARY_CLOUD_NAME": {
+      "description": "Cloudinary cloud name for file uploads",
+      "required": false
+    },
+    "CLOUDINARY_API_KEY": {
+      "description": "Cloudinary API key",
+      "required": false
+    },
+    "CLOUDINARY_API_SECRET": {
+      "description": "Cloudinary API secret",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1
+    }
+  },
+  "addons": [
+    "mongolab:sandbox"
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ]
+}
