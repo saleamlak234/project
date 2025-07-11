@@ -88,28 +88,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
-    // Login attempt tracking
-    loginAttempts: {
-      type: Number,
-      default: 0,
-    },
-    lockedUntil: {
-      type: Date,
-      default: null,
-    },
-    lastFailedLogin: {
-      type: Date,
-      default: null,
-    },
-    // Security settings
-    maxLoginAttempts: {
-      type: Number,
-      default: 5,
-    },
-    lockoutDuration: {
-      type: Number,
-      default: 15 * 60 * 1000, // 15 minutes in milliseconds
-    },
   },
   {
     timestamps: true,
@@ -133,50 +111,5 @@ userSchema.pre('save', async function(next) {
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
-
-// Check if account is locked
-userSchema.methods.isLocked = function () {
-  return !!(this.lockedUntil && this.lockedUntil > Date.now());
-};
-
-// Increment login attempts
-userSchema.methods.incLoginAttempts = async function () {
-  if (this.lockedUntil && this.lockedUntil < Date.now()) {
-    this.lockedUntil = null;
-    this.loginAttempts = 1;
-    this.lastFailedLogin = new Date();
-  } else {
-    this.loginAttempts = (this.loginAttempts || 0) + 1;
-    this.lastFailedLogin = new Date();
-  }
-  if (this.loginAttempts >= (this.maxLoginAttempts || 5) && !this.isLocked()) {
-    this.lockedUntil = Date.now() + (this.lockoutDuration || 15 * 60 * 1000);
-  }
-  await this.save();
-};
-
-// Reset login attempts
-userSchema.methods.resetLoginAttempts = async function () {
-  this.loginAttempts = 0;
-  this.lockedUntil = null;
-  this.lastFailedLogin = null;
-  await this.save();
-};
-
-// Get remaining lockout time in minutes
-userSchema.methods.getRemainingLockoutTime = function () {
-  if (!this.isLocked()) return 0;
-  return Math.ceil((this.lockedUntil - Date.now()) / (60 * 1000));
-};
-
-// Generate referral code method
-// userSchema.methods.generateReferralCode = function() {
-//   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-//   let result = '';
-//   for (let i = 0; i < 8; i++) {
-//     result += chars.charAt(Math.floor(Math.random() * chars.length));
-//   }
-//   return result;
-// };
 
 module.exports = mongoose.model("User", userSchema);

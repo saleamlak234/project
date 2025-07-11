@@ -1,23 +1,13 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const nodemailer = require("nodemailer");
 const User = require("../models/User");
 const authMiddleware = require("../middleware/auth");
 const telegramService = require("../services/telegram");
 const bcrypt = require("bcryptjs");
-const sendEmail = require("../config/emailVerification"); // Assuming you have a utility for sending emails
-const verifyEmailTemplate = require("../utils/verificationHtml"); //
+const sendEmail = require("../config/emailVerification");
+const verifyEmailTemplate = require("../utils/verificationHtml");
 const router = express.Router();
-
-// Email transporter setup
-// const transporter = nodemailer.createTransport({
-//   service: 'gmail',
-//   auth: {
-//     user: process.env.EMAIL_USER || 'sahamtrading11@gmail.com',
-//     pass: process.env.EMAIL_PASS || 'Saham@369'
-//   }
-// });
 
 // Generate JWT token
 const generateToken = ({ userId, role }) => {
@@ -56,10 +46,8 @@ router.post("/register", async (req, res) => {
       const existing = await User.findOne({ referralCode: newReferralCode });
       if (!existing) isUnique = true;
     }
-    const hashPassword = await bcrypt.hash(password, 10);
 
-    // Hash password before saving
-    // const hashPassword = await bcrypt.hash(password, 10);
+    const hashPassword = await bcrypt.hash(password, 10);
 
     // Create user with referrer if exists
     const user = new User({
@@ -109,7 +97,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// Login with enhanced security
+// Login
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -120,71 +108,10 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
-    // Check if account is locked
-    if (
-      user.isLocked &&
-      typeof user.isLocked === "function" &&
-      user.isLocked()
-    ) {
-      const remainingTime = user.getRemainingLockoutTime
-        ? user.getRemainingLockoutTime()
-        : 0;
-      return res.status(423).json({
-        message: `Account is locked. Please try again in ${remainingTime} minutes.`,
-        remainingMinutes: remainingTime,
-      });
-    }
-
     // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      // Increment login attempts if method exists
-      if (
-        user.incLoginAttempts &&
-        typeof user.incLoginAttempts === "function"
-      ) {
-        await user.incLoginAttempts();
-      }
-      // Check if account is now locked
-      const updatedUser = await User.findById(user._id);
-      if (
-        updatedUser &&
-        updatedUser.isLocked &&
-        typeof updatedUser.isLocked === "function" &&
-        updatedUser.isLocked()
-      ) {
-        const remainingTime = updatedUser.getRemainingLockoutTime
-          ? updatedUser.getRemainingLockoutTime()
-          : 0;
-        return res.status(423).json({
-          message: `Too many failed login attempts. Account is now locked for ${remainingTime} minutes.`,
-          remainingMinutes: remainingTime,
-        });
-      }
-      // Calculate attempts left if available
-      let attemptsLeft;
-      if (
-        user.maxLoginAttempts !== undefined &&
-        user.loginAttempts !== undefined
-      ) {
-        attemptsLeft = user.maxLoginAttempts - (user.loginAttempts + 1);
-      }
-      return res.status(400).json({
-        message:
-          attemptsLeft !== undefined
-            ? `Invalid email or password. ${attemptsLeft} attempts remaining before account lockout.`
-            : "Invalid email or password",
-        attemptsRemaining: attemptsLeft,
-      });
-    }
-
-    // Reset login attempts on successful login if method exists
-    if (
-      user.loginAttempts > 0 &&
-      user.resetLoginAttempts &&
-      typeof user.resetLoginAttempts === "function"
-    ) {
-      await user.resetLoginAttempts();
+      return res.status(400).json({ message: "Invalid email or password" });
     }
 
     // Check if account is active
@@ -227,37 +154,6 @@ router.get("/me", authMiddleware, async (req, res) => {
   }
 });
 
-// Unlock account (admin only)
-// router.post("/unlock-account", authMiddleware, async (req, res) => {
-//   try {
-//     const { userId } = req.body;
-
-//     // Check if current user is admin
-//     if (req.user.role !== "admin") {
-//       return res
-//         .status(403)
-//         .json({ message: "Access denied. Admin privileges required." });
-//     }
-
-//     const user = await User.findById(userId);
-//     if (!user) {
-//       return res.status(404).json({ message: "User not found" });
-//     }
-
-//     // Reset login attempts and unlock account
-//     await user.resetLoginAttempts();
-
-//     res.json({ message: "Account unlocked successfully" });
-//   } catch (error) {
-//     console.error("Unlock account error:", error);
-//     res.status(500).json({ message: "Server error unlocking account" });
-//   }
-// });
-
-// Get account security info
-
-// (Removed /security-info route)
-
 // Forgot password
 router.post("/forgot-password", async (req, res) => {
   try {
@@ -268,15 +164,6 @@ router.post("/forgot-password", async (req, res) => {
       return res
         .status(404)
         .json({ message: "User not found with this email" });
-    }
-
-    // Check if account is locked
-    if (user.isLocked()) {
-      const remainingTime = user.getRemainingLockoutTime();
-      return res.status(423).json({
-        message: `Account is locked. Please try again in ${remainingTime} minutes.`,
-        remainingMinutes: remainingTime,
-      });
     }
 
     // Generate reset token
@@ -318,14 +205,13 @@ router.post("/reset-password", async (req, res) => {
         .status(400)
         .json({ message: "Invalid or expired reset token" });
     }
+
     const hashPassword = await bcrypt.hash(password, 10);
+    
     // Update password and clear reset fields
     user.password = hashPassword;
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
-
-    // Reset login attempts when password is reset
-    await user.resetLoginAttempts();
 
     await user.save();
 

@@ -1,13 +1,4 @@
-// Utility to get current admin's permissions from localStorage (or context/auth)
-function getCurrentAdminPermissions(): string[] {
-  try {
-    const adminRole = JSON.parse(localStorage.getItem('adminRole') || '{}');
-    return Array.isArray(adminRole.permissions) ? adminRole.permissions : [];
-  } catch {
-    return [];
-  }
-}
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   User, 
@@ -36,6 +27,23 @@ export default function AdminRegister() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [canCreateAdmin, setCanCreateAdmin] = useState(false);
+
+  useEffect(() => {
+    // Check if current user has permission to create admin
+    checkAdminPermissions();
+  }, []);
+
+  const checkAdminPermissions = async () => {
+    try {
+      const response = await axios.get('/admin-auth/profile');
+      const permissions = response.data.adminRole?.permissions || [];
+      setCanCreateAdmin(permissions.includes('create_admin'));
+    } catch (error) {
+      console.error('Failed to check permissions:', error);
+      navigate('/admin');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +64,7 @@ export default function AdminRegister() {
     }
 
     try {
-      await axios.post('/admin/register', {
+      await axios.post('/admin-auth/create-admin', {
         fullName: formData.fullName,
         email: formData.email,
         phoneNumber: formData.phoneNumber,
@@ -65,14 +73,7 @@ export default function AdminRegister() {
 
       setSuccess('Admin account created successfully!');
       setTimeout(() => {
-        const permissions = getCurrentAdminPermissions();
-        if (permissions.includes('manage_users')) {
-          navigate('/admin/users');
-        } else if (permissions.includes('view_transactions')) {
-          navigate('/admin/transactions');
-        } else {
-          navigate('/admin');
-        }
+        navigate('/admin/users');
       }, 2000);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to create admin account');
@@ -87,6 +88,28 @@ export default function AdminRegister() {
       [e.target.name]: e.target.value
     }));
   };
+
+  if (!canCreateAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
+            <p className="text-gray-600 mb-6">
+              You don't have permission to create admin accounts. Only super admins can create new administrators.
+            </p>
+            <button
+              onClick={() => navigate('/admin')}
+              className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg font-medium"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -105,7 +128,7 @@ export default function AdminRegister() {
               </div>
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">Admin Registration</h2>
-                <p className="text-sm text-gray-600">Create a new admin account with full privileges</p>
+                <p className="text-sm text-gray-600">Create a new admin account with view permissions</p>
               </div>
             </div>
           </div>
@@ -260,10 +283,10 @@ export default function AdminRegister() {
               <div className="bg-gold-50 border border-gold-200 rounded-lg p-4">
                 <h4 className="font-medium text-gold-800 mb-2">Admin Privileges</h4>
                 <ul className="text-sm text-gold-700 space-y-1">
-                  <li>• Full access to user management</li>
-                  <li>• Transaction approval and rejection</li>
-                  <li>• Platform analytics and reports</li>
-                  <li>• System configuration access</li>
+                  <li>• View user accounts and information</li>
+                  <li>• Review transaction history</li>
+                  <li>• Access platform reports</li>
+                  <li>• Monitor system activity</li>
                 </ul>
               </div>
 

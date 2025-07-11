@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
-const dotenv = require("dotenv");
 const AdminRole = require("../models/AdminRole");
 const MerchantAccount = require("../models/MerchantAccount");
 const QRCode = require("qrcode");
@@ -22,13 +21,13 @@ async function completeSeed() {
     await MerchantAccount.deleteMany({});
     console.log("🧹 Cleared existing data");
 
-    // Create only one Super Admin
+    // Create Super Admin
     const superAdminPassword = await bcrypt.hash("superadmin123", 10);
     const superAdmin = new User({
-      fullName: "Minyichl Belay",
-      email: "minyichlbelay3@gmail.com",
+      fullName: "Super Admin",
+      email: "superadmin@sahamtrading.com",
       phoneNumber: "+251929343646",
-      password: 'minychil123',
+      password: superAdminPassword,
       role: "admin",
       referralCode: "SUPERADMIN",
       isActive: true,
@@ -55,6 +54,7 @@ async function completeSeed() {
         "view_reports",
         "manage_merchants",
         "system_settings",
+        "create_admin",
       ],
       isActive: true,
     });
@@ -162,11 +162,15 @@ async function completeSeed() {
     }
 
     console.log("\n🎉 Database seeding completed successfully!");
-    console.log("\n📋 ADMIN LOGIN CREDENTIALS:");
+    console.log("\n📋 LOGIN CREDENTIALS:");
     console.log("================================");
-   
-    console.log("   Permissions: Full system access");
-    
+    console.log("🔑 SUPER ADMIN:");
+    console.log("   Email: superadmin@sahamtrading.com");
+    console.log("   Password: superadmin123");
+    console.log("   Permissions: Full system access + Create Admin");
+    console.log("\n👤 SAMPLE USER:");
+    console.log("   Email: john@example.com");
+    console.log("   Password: password123");
 
     process.exit(0);
   } catch (error) {

@@ -1,22 +1,31 @@
-const {Resend}=require('resend');
-const dotenv=require('dotenv');
-require('dotenv').config(); // Adjust the path as necessary
-const resend = new Resend("re_PYy1p3Ff_JsoBuxWrTsQzbvMoCRnABuDV");
-const  sendEmail=async({sendTo,subject,html})=>{
-try {
-    const { data, error } = await resend.emails.send({
-      from: 'Sahamt <onboarding@resend.dev>',
+const nodemailer = require('nodemailer');
+require('dotenv').config();
+
+// Create transporter using Gmail
+const transporter = nodemailer.createTransporter({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD, // Use App Password, not regular password
+  },
+});
+
+const sendEmail = async ({ sendTo, subject, html }) => {
+  try {
+    const mailOptions = {
+      from: `"Saham Trading" <${process.env.GMAIL_USER}>`,
       to: sendTo,
       subject: subject,
       html: html,
-    });
-    if (error) {
-      return console.error({ error });
-    }
-    return data;
-} catch (error) {
-   console.log(error) 
-}
-} 
-// export default sendEmail
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email sent: ' + info.response);
+    return info;
+  } catch (error) {
+    console.error('Email sending error:', error);
+    throw error;
+  }
+};
+
 module.exports = sendEmail;

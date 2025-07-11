@@ -15,9 +15,6 @@ router.get("/stats", async (req, res) => {
     // User statistics
     const totalUsers = await User.countDocuments();
     const activeUsers = await User.countDocuments({ isActive: true });
-    const lockedUsers = await User.countDocuments({
-      lockedUntil: { $gt: new Date() },
-    });
 
     // Financial statistics
     const totalDepositsResult = await Deposit.aggregate([
@@ -103,7 +100,6 @@ router.get("/stats", async (req, res) => {
     res.json({
       totalUsers,
       activeUsers,
-      lockedUsers,
       totalDeposits: totalDepositsResult[0]?.total || 0,
       totalWithdrawals: totalWithdrawalsResult[0]?.total || 0,
       totalCommissions: totalCommissionsResult[0]?.total || 0,
@@ -119,24 +115,11 @@ router.get("/stats", async (req, res) => {
   }
 });
 
-// Get all users with security info
-router.get("/users", async (req, res) => {
+// Get all users
+router.get("/users", adminAuthMiddleware(["view_users"]), async (req, res) => {
   try {
     const users = await User.find().select("-password").sort({ createdAt: -1 });
-
-    // Add security status to each user
-    const usersWithSecurity = users.map((user) => ({
-      ...user.toObject(),
-      // securityStatus: {
-      //   isLocked: user.isLocked(),
-      //   loginAttempts: user.loginAttempts || 0,
-      //   maxLoginAttempts: user.maxLoginAttempts || 5,
-      //   remainingMinutes: user.isLocked() ? user.getRemainingLockoutTime() : 0,
-      //   lastFailedLogin: user.lastFailedLogin
-      // }
-    }));
-
-    res.json({ users: usersWithSecurity });
+    res.json({ users });
   } catch (error) {
     console.error("Get users error:", error);
     res.status(500).json({ message: "Server error fetching users" });
@@ -144,7 +127,7 @@ router.get("/users", async (req, res) => {
 });
 
 // Update user status
-router.put("/users/:userId/status", async (req, res) => {
+router.put("/users/:userId/status", adminAuthMiddleware(["edit_users"]), async (req, res) => {
   try {
     const { userId } = req.params;
     const { isActive } = req.body;
@@ -175,77 +158,8 @@ router.put("/users/:userId/status", async (req, res) => {
   }
 });
 
-// Unlock user account
-router.post("/users/:userId/unlock", async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Reset login attempts and unlock account
-    await user.resetLoginAttempts();
-
-    // Send notification to user
-    if (user.telegramChatId) {
-      await telegramService.sendMessage(
-        user.telegramChatId,
-        "🔓 Your account has been unlocked by an administrator. You can now log in normally."
-      );
-    }
-
-    res.json({ message: "User account unlocked successfully" });
-  } catch (error) {
-    console.error("Unlock user account error:", error);
-    res.status(500).json({ message: "Server error unlocking user account" });
-  }
-});
-
-// Get security overview
-router.get("/security-overview", async (req, res) => {
-  try {
-    const totalUsers = await User.countDocuments();
-    const lockedUsers = await User.countDocuments({
-      lockedUntil: { $gt: new Date() },
-    });
-    const usersWithFailedAttempts = await User.countDocuments({
-      loginAttempts: { $gt: 0 },
-    });
-
-    // Get recent failed login attempts
-    const recentFailedLogins = await User.find({
-      lastFailedLogin: { $exists: true, $ne: null },
-    })
-      .select("fullName email lastFailedLogin loginAttempts lockedUntil")
-      .sort({ lastFailedLogin: -1 })
-      .limit(10);
-
-    res.json({
-      totalUsers,
-      lockedUsers,
-      usersWithFailedAttempts,
-      recentFailedLogins: recentFailedLogins.map((user) => ({
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        lastFailedLogin: user.lastFailedLogin,
-        loginAttempts: user.loginAttempts,
-        isLocked: user.isLocked(),
-        remainingMinutes: user.isLocked() ? user.getRemainingLockoutTime() : 0,
-      })),
-    });
-  } catch (error) {
-    console.error("Get security overview error:", error);
-    res
-      .status(500)
-      .json({ message: "Server error fetching security overview" });
-  }
-});
-
 // Get all transactions
-router.get("/transactions", async (req, res) => {
+router.get("/transactions", adminAuthMiddleware(["view_transactions"]), async (req, res) => {
   try {
     const deposits = await Deposit.find()
       .populate("user", "fullName email phoneNumber")
@@ -293,7 +207,7 @@ router.get("/transactions", async (req, res) => {
 });
 
 // Get single transaction
-router.get("/transactions/:transactionId", async (req, res) => {
+router.get("/transactions/:transactionId", adminAuthMiddleware(["view_transactions"]), async (req, res) => {
   try {
     const { transactionId } = req.params;
 
@@ -353,7 +267,7 @@ router.get("/transactions/:transactionId", async (req, res) => {
 });
 
 // Update transaction status
-router.put("/transactions/:transactionId", async (req, res) => {
+router.put("/transactions/:transactionId", adminAuthMiddleware(["process_transactions"]), async (req, res) => {
   try {
     const { transactionId } = req.params;
     const { action, rejectionReason } = req.body;
@@ -418,8 +332,8 @@ router.put("/transactions/:transactionId", async (req, res) => {
   }
 });
 
-// Register new admin
-router.post("/register", async (req, res) => {
+// Register new admin (super admin only)
+router.post("/register", adminAuthMiddleware(["create_admin"]), async (req, res) => {
   try {
     const { fullName, email, phoneNumber, password } = req.body;
 

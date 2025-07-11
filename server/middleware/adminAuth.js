@@ -13,12 +13,6 @@ const adminAuthMiddleware = (requiredPermissions = []) => {
         return res.status(403).json({ message: 'Admin role not found or inactive.' });
       }
 
-      // if (adminRole.isLocked()) {
-      //   return res.status(423).json({ 
-      //     message: 'Account is locked due to multiple failed login attempts.' 
-      //   });
-      // }
-
       // Check permissions
       if (requiredPermissions.length > 0) {
         const hasPermission = requiredPermissions.some(permission => 

@@ -29,87 +29,6 @@ router.post("/login", async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid admin credentials" });
     }
-    // Create a new admin (super admin only)
-    router.post("/create-admin", authMiddleware, async (req, res) => {
-      try {
-        const { fullName, email, phoneNumber, password, role } = req.body;
-
-        // Only super admin can create new admins
-        const currentAdminRole = await AdminRole.findOne({
-          user: req.user._id,
-        });
-        if (!currentAdminRole || currentAdminRole.role !== "super_admin") {
-          return res
-            .status(403)
-            .json({ message: "Only super admin can create admins" });
-        }
-
-        // Check if user already exists
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-          return res
-            .status(400)
-            .json({ message: "User already exists with this email" });
-        }
-
-        // Create user with admin role
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({
-          fullName,
-          email,
-          phoneNumber,
-          password: hashedPassword,
-          role: "admin",
-          isActive: true,
-        });
-        await newUser.save();
-
-        // Assign admin role and permissions
-
-        let adminRoleName = role || "view_admin_1";
-        let permissions = [];
-        switch (adminRoleName) {
-          case "super_admin":
-            permissions = [
-              "view_users",
-              "edit_users",
-              "delete_users",
-              "view_transactions",
-              "process_transactions",
-              "view_reports",
-              "manage_merchants",
-              "system_settings",
-            ];
-            break;
-          case "view_admin_1":
-          default:
-            permissions = ["view_users", "view_transactions", "view_reports"];
-            break;
-        }
-
-        const newAdminRole = new AdminRole({
-          user: newUser._id,
-          role: adminRoleName,
-          permissions,
-          isActive: true,
-        });
-        await newAdminRole.save();
-
-        res.status(201).json({
-          message: "Admin created successfully",
-          user: {
-            id: newUser._id,
-            fullName: newUser.fullName,
-            email: newUser.email,
-            role: newUser.role,
-          },
-          adminRole: newAdminRole,
-        });
-      } catch (error) {
-        console.error("Create admin error:", error);
-        res.status(500).json({ message: "Server error creating admin" });
-      }
-    });
 
     // Update last login
     adminRole.lastLogin = new Date();
@@ -145,6 +64,98 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// Create a new admin (super admin only)
+router.post("/create-admin", authMiddleware, async (req, res) => {
+  try {
+    const { fullName, email, phoneNumber, password, role } = req.body;
+
+    // Only super admin can create new admins
+    const currentAdminRole = await AdminRole.findOne({
+      user: req.user._id,
+    });
+    if (!currentAdminRole || currentAdminRole.role !== "super_admin") {
+      return res
+        .status(403)
+        .json({ message: "Only super admin can create admins" });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ message: "User already exists with this email" });
+    }
+
+    // Generate unique referral code
+    let newReferralCode;
+    let isUnique = false;
+    while (!isUnique) {
+      newReferralCode = generateReferralCode();
+      const existing = await User.findOne({ referralCode: newReferralCode });
+      if (!existing) isUnique = true;
+    }
+
+    // Create user with admin role
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({
+      fullName,
+      email,
+      phoneNumber,
+      password: hashedPassword,
+      role: "admin",
+      referralCode: newReferralCode,
+      isActive: true,
+    });
+    await newUser.save();
+
+    // Assign admin role and permissions
+    let adminRoleName = role || "view_admin_1";
+    let permissions = [];
+    switch (adminRoleName) {
+      case "super_admin":
+        permissions = [
+          "view_users",
+          "edit_users",
+          "delete_users",
+          "view_transactions",
+          "process_transactions",
+          "view_reports",
+          "manage_merchants",
+          "system_settings",
+          "create_admin",
+        ];
+        break;
+      case "view_admin_1":
+      default:
+        permissions = ["view_users", "view_transactions", "view_reports"];
+        break;
+    }
+
+    const newAdminRole = new AdminRole({
+      user: newUser._id,
+      role: adminRoleName,
+      permissions,
+      isActive: true,
+    });
+    await newAdminRole.save();
+
+    res.status(201).json({
+      message: "Admin created successfully",
+      user: {
+        id: newUser._id,
+        fullName: newUser.fullName,
+        email: newUser.email,
+        role: newUser.role,
+      },
+      adminRole: newAdminRole,
+    });
+  } catch (error) {
+    console.error("Create admin error:", error);
+    res.status(500).json({ message: "Server error creating admin" });
+  }
+});
+
 // Get admin profile
 router.get("/profile", authMiddleware, async (req, res) => {
   try {
@@ -161,8 +172,6 @@ router.get("/profile", authMiddleware, async (req, res) => {
             role: adminRole.role,
             permissions: adminRole.permissions,
             lastLogin: adminRole.lastLogin,
-            loginAttempts: adminRole.loginAttempts,
-            isLocked: adminRole.isLocked(),
           }
         : null,
     });
@@ -172,108 +181,14 @@ router.get("/profile", authMiddleware, async (req, res) => {
   }
 });
 
-// Unlock admin account (super admin only)
-router.post("/unlock-admin", authMiddleware, async (req, res) => {
-  try {
-    const { adminUserId } = req.body;
-
-    // Check if current user is super admin
-    const currentAdminRole = await AdminRole.findOne({ user: req.user._id });
-    if (!currentAdminRole || currentAdminRole.role !== "super_admin") {
-      return res
-        .status(403)
-        .json({ message: "Only super admin can unlock admin accounts" });
-    }
-
-    // Find the admin user and role
-    const adminUser = await User.findById(adminUserId);
-    const adminRole = await AdminRole.findOne({ user: adminUserId });
-
-    if (!adminUser || !adminRole) {
-      return res.status(404).json({ message: "Admin user not found" });
-    }
-
-    // Reset login attempts for both user and admin role
-    await adminUser.resetLoginAttempts();
-    await adminRole.resetLoginAttempts();
-
-    res.json({ message: "Admin account unlocked successfully" });
-  } catch (error) {
-    console.error("Unlock admin account error:", error);
-    res.status(500).json({ message: "Server error unlocking admin account" });
+// Helper function to generate referral code
+function generateReferralCode() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-});
-
-// Create admin role (super admin only)
-router.post("/create-role", authMiddleware, async (req, res) => {
-  try {
-    const { userId, role, permissions } = req.body;
-
-    // Check if current user is super admin
-    const currentAdminRole = await AdminRole.findOne({ user: req.user._id });
-    if (!currentAdminRole || currentAdminRole.role !== "super_admin") {
-      return res
-        .status(403)
-        .json({ message: "Only super admin can create admin roles" });
-    }
-
-    // Check if user exists and is admin
-    const user = await User.findById(userId);
-    if (!user || user.role !== "admin") {
-      return res
-        .status(400)
-        .json({ message: "User not found or not an admin" });
-    }
-
-    // Check if admin role already exists
-    const existingRole = await AdminRole.findOne({ user: userId });
-    if (existingRole) {
-      return res
-        .status(400)
-        .json({ message: "Admin role already exists for this user" });
-    }
-
-    // Define default permissions based on role
-    let defaultPermissions = [];
-    switch (role) {
-      case "super_admin":
-        defaultPermissions = [
-          "view_users",
-          "edit_users",
-          "delete_users",
-          "view_transactions",
-          "process_transactions",
-          "view_reports",
-          "manage_merchants",
-          "system_settings",
-        ];
-        break;
-      case "view_admin_1":
-      case "view_admin_2":
-        defaultPermissions = [
-          "view_users",
-          "view_transactions",
-          "view_reports",
-        ];
-        break;
-    }
-
-    const adminRole = new AdminRole({
-      user: userId,
-      role,
-      permissions: permissions || defaultPermissions,
-    });
-
-    await adminRole.save();
-
-    res.status(201).json({
-      message: "Admin role created successfully",
-      adminRole,
-    });
-  } catch (error) {
-    console.error("Create admin role error:", error);
-    res.status(500).json({ message: "Server error creating admin role" });
-  }
-});
+  return result;
+}
 
 module.exports = router;
